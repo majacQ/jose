@@ -1,17 +1,21 @@
-import { getCiphers, KeyObject, createDecipheriv } from 'crypto'
-import type { CipherGCMTypes } from 'crypto'
+import { createDecipheriv, KeyObject } from 'node:crypto'
+import type { CipherGCMTypes } from 'node:crypto'
 
 import type { DecryptFunction } from '../interfaces.d'
 import checkIvLength from '../../lib/check_iv_length.js'
 import checkCekLength from './check_cek_length.js'
 import { concat } from '../../lib/buffer_utils.js'
-import { JOSENotSupported, JWEDecryptionFailed } from '../../util/errors.js'
+import { JOSENotSupported, JWEDecryptionFailed, JWEInvalid } from '../../util/errors.js'
 import timingSafeEqual from './timing_safe_equal.js'
 import cbcTag from './cbc_tag.js'
-import { isCryptoKey, getKeyObject } from './webcrypto.js'
-import type { KeyLike } from '../../types.d'
+import { isCryptoKey } from './webcrypto.js'
+import { checkEncCryptoKey } from '../../lib/crypto_key.js'
+import isKeyObject from './is_key_object.js'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import supported from './ciphers.js'
+import { types } from './is_key_like.js'
 
-async function cbcDecrypt(
+function cbcDecrypt(
   enc: string,
   cek: KeyObject | Uint8Array,
   ciphertext: Uint8Array,
@@ -19,20 +23,19 @@ async function cbcDecrypt(
   tag: Uint8Array,
   aad: Uint8Array,
 ) {
-  const keySize = parseInt(enc.substr(1, 3), 10)
+  const keySize = parseInt(enc.slice(1, 4), 10)
 
-  if (cek instanceof KeyObject) {
-    // eslint-disable-next-line no-param-reassign
+  if (isKeyObject(cek)) {
     cek = cek.export()
   }
 
   const encKey = cek.subarray(keySize >> 3)
   const macKey = cek.subarray(0, keySize >> 3)
-  const macSize = parseInt(enc.substr(-3), 10)
+  const macSize = parseInt(enc.slice(-3), 10)
 
   const algorithm = `aes-${keySize}-cbc`
-  if (!getCiphers().includes(algorithm)) {
-    throw new JOSENotSupported(`alg ${enc} is unsupported either by your javascript runtime`)
+  if (!supported(algorithm)) {
+    throw new JOSENotSupported(`alg ${enc} is not supported by your javascript runtime`)
   }
 
   const expectedTag = cbcTag(aad, iv, ciphertext, macSize, macKey, keySize)
@@ -49,8 +52,8 @@ async function cbcDecrypt(
 
   let plaintext!: Uint8Array
   try {
-    const cipher = createDecipheriv(algorithm, encKey, iv)
-    plaintext = concat(cipher.update(ciphertext), cipher.final())
+    const decipher = createDecipheriv(algorithm, encKey, iv)
+    plaintext = concat(decipher.update(ciphertext), decipher.final())
   } catch {
     //
   }
@@ -60,7 +63,8 @@ async function cbcDecrypt(
 
   return plaintext
 }
-async function gcmDecrypt(
+
+function gcmDecrypt(
   enc: string,
   cek: KeyObject | Uint8Array,
   ciphertext: Uint8Array,
@@ -68,51 +72,67 @@ async function gcmDecrypt(
   tag: Uint8Array,
   aad: Uint8Array,
 ) {
-  const keySize = parseInt(enc.substr(1, 3), 10)
+  const keySize = parseInt(enc.slice(1, 4), 10)
 
-  const algorithm = <CipherGCMTypes>`aes-${keySize}-gcm`
-  if (!getCiphers().includes(algorithm)) {
-    throw new JOSENotSupported(`alg ${enc} is unsupported either by your javascript runtime`)
+  const algorithm = `aes-${keySize}-gcm` as CipherGCMTypes
+  if (!supported(algorithm)) {
+    throw new JOSENotSupported(`alg ${enc} is not supported by your javascript runtime`)
   }
   try {
-    const cipher = createDecipheriv(algorithm, cek, iv, { authTagLength: 16 })
-    cipher.setAuthTag(tag)
+    const decipher = createDecipheriv(algorithm, cek, iv, { authTagLength: 16 })
+    decipher.setAuthTag(tag)
     if (aad.byteLength) {
-      cipher.setAAD(aad)
+      decipher.setAAD(aad, { plaintextLength: ciphertext.length })
     }
 
-    return concat(cipher.update(ciphertext), cipher.final())
-  } catch (err) {
+    const plaintext = decipher.update(ciphertext)
+    decipher.final()
+    return plaintext
+  } catch {
     throw new JWEDecryptionFailed()
   }
 }
 
-const decrypt: DecryptFunction = async (
+const decrypt: DecryptFunction = (
   enc: string,
   cek: unknown,
   ciphertext: Uint8Array,
-  iv: Uint8Array,
-  tag: Uint8Array,
+  iv: Uint8Array | undefined,
+  tag: Uint8Array | undefined,
   aad: Uint8Array,
 ) => {
-  let key: KeyLike
+  let key: KeyObject | Uint8Array
   if (isCryptoKey(cek)) {
-    // eslint-disable-next-line no-param-reassign
-    key = getKeyObject(cek, enc, new Set(['decrypt']))
-  } else if (cek instanceof Uint8Array || cek instanceof KeyObject) {
+    checkEncCryptoKey(cek, enc, 'decrypt')
+    key = KeyObject.from(cek)
+  } else if (cek instanceof Uint8Array || isKeyObject(cek)) {
     key = cek
   } else {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(cek, ...types, 'Uint8Array'))
+  }
+
+  if (!iv) {
+    throw new JWEInvalid('JWE Initialization Vector missing')
+  }
+  if (!tag) {
+    throw new JWEInvalid('JWE Authentication Tag missing')
   }
 
   checkCekLength(enc, key)
   checkIvLength(enc, iv)
 
-  if (enc.substr(4, 3) === 'CBC') {
-    return cbcDecrypt(enc, key, ciphertext, iv, tag, aad)
+  switch (enc) {
+    case 'A128CBC-HS256':
+    case 'A192CBC-HS384':
+    case 'A256CBC-HS512':
+      return cbcDecrypt(enc, key, ciphertext, iv, tag, aad)
+    case 'A128GCM':
+    case 'A192GCM':
+    case 'A256GCM':
+      return gcmDecrypt(enc, key, ciphertext, iv, tag, aad)
+    default:
+      throw new JOSENotSupported('Unsupported JWE Content Encryption Algorithm')
   }
-
-  return gcmDecrypt(enc, key, ciphertext, iv, tag, aad)
 }
 
 export default decrypt

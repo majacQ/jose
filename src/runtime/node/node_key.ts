@@ -1,9 +1,10 @@
-import type { KeyObject, SignKeyObjectInput } from 'crypto'
-import { constants } from 'crypto'
+import { constants, KeyObject } from 'node:crypto'
+import type { SigningOptions } from 'node:crypto'
 
 import getNamedCurve from './get_named_curve.js'
 import { JOSENotSupported } from '../../util/errors.js'
-import checkModulusLength from './check_modulus_length.js'
+import checkKeyLength from './check_key_length.js'
+import type { JWK } from '../../types.d'
 
 const ecCurveAlgMap = new Map([
   ['ES256', 'P-256'],
@@ -12,56 +13,121 @@ const ecCurveAlgMap = new Map([
   ['ES512', 'P-521'],
 ])
 
-export default function keyForCrypto(alg: string, key: KeyObject): KeyObject | SignKeyObjectInput {
+export default function keyForCrypto<KeyObjectOptions, JWKOptions>(
+  alg: string,
+  key: KeyObject | JWK,
+): KeyObjectOptions | JWKOptions | KeyObject {
+  let asymmetricKeyType: string
+  let asymmetricKeyDetails: KeyObject['asymmetricKeyDetails']
+
+  let isJWK: true | undefined
+
+  if (key instanceof KeyObject) {
+    asymmetricKeyType = key.asymmetricKeyType!
+    asymmetricKeyDetails = key.asymmetricKeyDetails
+  } else {
+    isJWK = true
+    switch (key.kty) {
+      case 'RSA':
+        asymmetricKeyType = 'rsa'
+        break
+      case 'EC':
+        asymmetricKeyType = 'ec'
+        break
+      case 'OKP': {
+        if (key.crv === 'Ed25519') {
+          asymmetricKeyType = 'ed25519'
+          break
+        }
+        if (key.crv === 'Ed448') {
+          asymmetricKeyType = 'ed448'
+          break
+        }
+        throw new TypeError('Invalid key for this operation, its crv must be Ed25519 or Ed448')
+      }
+      default:
+        throw new TypeError('Invalid key for this operation, its kty must be RSA, OKP, or EC')
+    }
+  }
+
+  let options!: SigningOptions
   switch (alg) {
     case 'EdDSA':
-      if (key.type === 'secret' || !['ed25519', 'ed448'].includes(key.asymmetricKeyType!)) {
-        throw new TypeError('invalid key type or asymmetric key type for this operation')
+      if (!['ed25519', 'ed448'].includes(asymmetricKeyType)) {
+        throw new TypeError(
+          'Invalid key for this operation, its asymmetricKeyType must be ed25519 or ed448',
+        )
       }
-
-      return key
-
+      break
     case 'RS256':
     case 'RS384':
     case 'RS512':
-      if (key.type === 'secret' || key.asymmetricKeyType !== 'rsa') {
-        throw new TypeError('invalid key type or asymmetric key type for this operation')
+      if (asymmetricKeyType !== 'rsa') {
+        throw new TypeError('Invalid key for this operation, its asymmetricKeyType must be rsa')
       }
-      checkModulusLength(key, alg)
-
-      return key
-
+      checkKeyLength(key, alg)
+      break
     case 'PS256':
     case 'PS384':
     case 'PS512':
-      if (key.type === 'secret' || key.asymmetricKeyType !== 'rsa') {
-        throw new TypeError('invalid key type or asymmetric key type for this operation')
-      }
-      checkModulusLength(key, alg)
+      if (asymmetricKeyType === 'rsa-pss') {
+        const { hashAlgorithm, mgf1HashAlgorithm, saltLength } = asymmetricKeyDetails!
 
-      return {
-        key,
+        const length = parseInt(alg.slice(-3), 10)
+
+        if (
+          hashAlgorithm !== undefined &&
+          (hashAlgorithm !== `sha${length}` || mgf1HashAlgorithm !== hashAlgorithm)
+        ) {
+          throw new TypeError(
+            `Invalid key for this operation, its RSA-PSS parameters do not meet the requirements of "alg" ${alg}`,
+          )
+        }
+        if (saltLength !== undefined && saltLength > length >> 3) {
+          throw new TypeError(
+            `Invalid key for this operation, its RSA-PSS parameter saltLength does not meet the requirements of "alg" ${alg}`,
+          )
+        }
+      } else if (asymmetricKeyType !== 'rsa') {
+        throw new TypeError(
+          'Invalid key for this operation, its asymmetricKeyType must be rsa or rsa-pss',
+        )
+      }
+      checkKeyLength(key, alg)
+
+      options = {
         padding: constants.RSA_PKCS1_PSS_PADDING,
         saltLength: constants.RSA_PSS_SALTLEN_DIGEST,
       }
-
+      break
     case 'ES256':
     case 'ES256K':
     case 'ES384':
-    case 'ES512':
-      if (key.type === 'secret' || key.asymmetricKeyType !== 'ec') {
-        throw new TypeError('invalid key type or asymmetric key type for this operation')
+    case 'ES512': {
+      if (asymmetricKeyType !== 'ec') {
+        throw new TypeError('Invalid key for this operation, its asymmetricKeyType must be ec')
       }
 
-      if (ecCurveAlgMap.get(alg) !== getNamedCurve(key)) {
-        throw new TypeError('invalid key curve for the algorithm')
+      const actual = getNamedCurve(key)
+      const expected = ecCurveAlgMap.get(alg)
+      if (actual !== expected) {
+        throw new TypeError(
+          `Invalid key curve for the algorithm, its curve must be ${expected}, got ${actual}`,
+        )
       }
 
-      return { dsaEncoding: 'ieee-p1363', key }
-
+      options = { dsaEncoding: 'ieee-p1363' }
+      break
+    }
     default:
       throw new JOSENotSupported(
-        `alg ${alg} is unsupported either by JOSE or your javascript runtime`,
+        `alg ${alg} is not supported either by JOSE or your javascript runtime`,
       )
   }
+
+  if (isJWK) {
+    return { format: 'jwk', key, ...options } as JWKOptions
+  }
+
+  return options ? ({ ...options, key } as KeyObjectOptions) : (key as KeyObject)
 }

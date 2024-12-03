@@ -1,5 +1,6 @@
-import { KeyObject } from 'crypto'
+import { KeyObject } from 'node:crypto'
 import { JWEInvalid, JOSENotSupported } from '../../util/errors.js'
+import isKeyObject from './is_key_object.js'
 
 const checkCekLength = (enc: string, cek: KeyObject | Uint8Array) => {
   let expected: number
@@ -7,29 +8,35 @@ const checkCekLength = (enc: string, cek: KeyObject | Uint8Array) => {
     case 'A128CBC-HS256':
     case 'A192CBC-HS384':
     case 'A256CBC-HS512':
-      expected = parseInt(enc.substr(-3), 10)
+      expected = parseInt(enc.slice(-3), 10)
       break
     case 'A128GCM':
     case 'A192GCM':
     case 'A256GCM':
-      expected = parseInt(enc.substr(1, 3), 10)
+      expected = parseInt(enc.slice(1, 4), 10)
       break
     default:
       throw new JOSENotSupported(
-        `Content Encryption Algorithm ${enc} is unsupported either by JOSE or your javascript runtime`,
+        `Content Encryption Algorithm ${enc} is not supported either by JOSE or your javascript runtime`,
       )
   }
 
   if (cek instanceof Uint8Array) {
-    if (cek.length << 3 !== expected) {
-      throw new JWEInvalid('Invalid Content Encryption Key length')
+    const actual = cek.byteLength << 3
+    if (actual !== expected) {
+      throw new JWEInvalid(
+        `Invalid Content Encryption Key length. Expected ${expected} bits, got ${actual} bits`,
+      )
     }
     return
   }
 
-  if (cek instanceof KeyObject && cek.type === 'secret') {
-    if (cek.symmetricKeySize! << 3 !== expected) {
-      throw new JWEInvalid('Invalid Content Encryption Key length')
+  if (isKeyObject(cek) && cek.type === 'secret') {
+    const actual = cek.symmetricKeySize! << 3
+    if (actual !== expected) {
+      throw new JWEInvalid(
+        `Invalid Content Encryption Key length. Expected ${expected} bits, got ${actual} bits`,
+      )
     }
     return
   }

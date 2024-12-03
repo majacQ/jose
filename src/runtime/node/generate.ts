@@ -1,14 +1,15 @@
-import { createSecretKey, generateKeyPair as generateKeyPairCb } from 'crypto'
-import { promisify } from 'util'
+import { createSecretKey, generateKeyPair as generateKeyPairCb } from 'node:crypto'
+import { promisify } from 'node:util'
 
 import random from './random.js'
-import { setModulusLength } from './check_modulus_length.js'
 import { JOSENotSupported } from '../../util/errors.js'
-import type { GenerateKeyPairOptions } from '../../util/generate_key_pair.js'
+import type { GenerateKeyPairOptions } from '../../key/generate_key_pair.js'
+import type { GenerateSecretOptions } from '../../key/generate_secret.js'
 
 const generate = promisify(generateKeyPairCb)
 
-export async function generateSecret(alg: string) {
+// @ts-expect-error
+export async function generateSecret(alg: string, options?: GenerateSecretOptions) {
   let length: number
   switch (alg) {
     case 'HS256':
@@ -17,7 +18,7 @@ export async function generateSecret(alg: string) {
     case 'A128CBC-HS256':
     case 'A192CBC-HS384':
     case 'A256CBC-HS512':
-      length = parseInt(alg.substr(-3), 10)
+      length = parseInt(alg.slice(-3), 10)
       break
     case 'A128KW':
     case 'A192KW':
@@ -28,10 +29,10 @@ export async function generateSecret(alg: string) {
     case 'A128GCM':
     case 'A192GCM':
     case 'A256GCM':
-      length = parseInt(alg.substring(1, 4), 10)
+      length = parseInt(alg.slice(1, 4), 10)
       break
     default:
-      throw new JOSENotSupported('unsupported or invalid JWK "alg" (Algorithm) Parameter value')
+      throw new JOSENotSupported('Invalid or unsupported JWK "alg" (Algorithm) Parameter value')
   }
 
   return createSecretKey(random(new Uint8Array(length >> 3)))
@@ -53,15 +54,13 @@ export async function generateKeyPair(alg: string, options?: GenerateKeyPairOpti
       const modulusLength = options?.modulusLength ?? 2048
       if (typeof modulusLength !== 'number' || modulusLength < 2048) {
         throw new JOSENotSupported(
-          'invalid or unsupported modulusLength option provided, 2048 bits or larger keys must be used',
+          'Invalid or unsupported modulusLength option provided, 2048 bits or larger keys must be used',
         )
       }
       const keypair = await generate('rsa', {
         modulusLength,
         publicExponent: 0x10001,
       })
-      setModulusLength(keypair.privateKey, modulusLength)
-      setModulusLength(keypair.publicKey, modulusLength)
       return keypair
     }
     case 'ES256':
@@ -81,30 +80,32 @@ export async function generateKeyPair(alg: string, options?: GenerateKeyPairOpti
           return generate('ed448')
         default:
           throw new JOSENotSupported(
-            'invalid or unsupported crv option provided, supported values are Ed25519 and Ed448',
+            'Invalid or unsupported crv option provided, supported values are Ed25519 and Ed448',
           )
       }
     }
     case 'ECDH-ES':
     case 'ECDH-ES+A128KW':
     case 'ECDH-ES+A192KW':
-    case 'ECDH-ES+A256KW':
-      switch (options?.crv) {
+    case 'ECDH-ES+A256KW': {
+      const crv = options?.crv ?? 'P-256'
+      switch (crv) {
         case undefined:
         case 'P-256':
         case 'P-384':
         case 'P-521':
-          return generate('ec', { namedCurve: options?.crv ?? 'P-256' })
+          return generate('ec', { namedCurve: crv })
         case 'X25519':
           return generate('x25519')
         case 'X448':
           return generate('x448')
         default:
           throw new JOSENotSupported(
-            'invalid or unsupported crv option provided, supported values are P-256, P-384, P-521, X25519, and X448',
+            'Invalid or unsupported crv option provided, supported values are P-256, P-384, P-521, X25519, and X448',
           )
       }
+    }
     default:
-      throw new JOSENotSupported('unsupported or invalid JWK "alg" (Algorithm) Parameter value')
+      throw new JOSENotSupported('Invalid or unsupported JWK "alg" (Algorithm) Parameter value')
   }
 }

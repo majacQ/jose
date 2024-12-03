@@ -1,26 +1,25 @@
-import type {
-  EcdhAllowedFunction,
-  EcdhESDeriveKeyFunction,
-  GenerateEpkFunction,
-} from '../interfaces.d'
 import { encoder, concat, uint32be, lengthAndInput, concatKdf } from '../../lib/buffer_utils.js'
 import crypto, { isCryptoKey } from './webcrypto.js'
-import digest from './digest.js'
+import { checkEncCryptoKey } from '../../lib/crypto_key.js'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import { types } from './is_key_like.js'
 
-export const deriveKey: EcdhESDeriveKeyFunction = async (
+export async function deriveKey(
   publicKey: unknown,
   privateKey: unknown,
   algorithm: string,
   keyLength: number,
   apu: Uint8Array = new Uint8Array(0),
   apv: Uint8Array = new Uint8Array(0),
-) => {
+) {
   if (!isCryptoKey(publicKey)) {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(publicKey, ...types))
   }
+  checkEncCryptoKey(publicKey, 'ECDH')
   if (!isCryptoKey(privateKey)) {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(privateKey, ...types))
   }
+  checkEncCryptoKey(privateKey, 'ECDH', 'deriveBits')
 
   const value = concat(
     lengthAndInput(encoder.encode(algorithm)),
@@ -29,42 +28,46 @@ export const deriveKey: EcdhESDeriveKeyFunction = async (
     uint32be(keyLength),
   )
 
-  if (!privateKey.usages.includes('deriveBits')) {
-    throw new TypeError('ECDH-ES private key "usages" must include "deriveBits"')
+  let length: number
+  if (publicKey.algorithm.name === 'X25519') {
+    length = 256
+  } else if (publicKey.algorithm.name === 'X448') {
+    length = 448
+  } else {
+    length =
+      Math.ceil(parseInt((publicKey.algorithm as EcKeyAlgorithm).namedCurve.substr(-3), 10) / 8) <<
+      3
   }
 
   const sharedSecret = new Uint8Array(
     await crypto.subtle.deriveBits(
       {
-        name: 'ECDH',
+        name: publicKey.algorithm.name,
         public: publicKey,
       },
       privateKey,
-      Math.ceil(parseInt((<EcKeyAlgorithm>privateKey.algorithm).namedCurve.substr(-3), 10) / 8) <<
-        3,
+      length,
     ),
   )
 
-  return concatKdf(digest, sharedSecret, keyLength, value)
+  return concatKdf(sharedSecret, keyLength, value)
 }
 
-export const generateEpk: GenerateEpkFunction = async (key: unknown) => {
+export async function generateEpk(key: unknown) {
   if (!isCryptoKey(key)) {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(key, ...types))
   }
 
+  return crypto.subtle.generateKey(key.algorithm as EcKeyAlgorithm, true, ['deriveBits'])
+}
+
+export function ecdhAllowed(key: unknown) {
+  if (!isCryptoKey(key)) {
+    throw new TypeError(invalidKeyInput(key, ...types))
+  }
   return (
-    await crypto.subtle.generateKey(
-      { name: 'ECDH', namedCurve: (<EcKeyAlgorithm>key.algorithm).namedCurve },
-      true,
-      ['deriveBits'],
-    )
-  ).privateKey
-}
-
-export const ecdhAllowed: EcdhAllowedFunction = (key: unknown) => {
-  if (!isCryptoKey(key)) {
-    throw new TypeError('invalid key input')
-  }
-  return ['P-256', 'P-384', 'P-521'].includes((<EcKeyAlgorithm>key.algorithm).namedCurve)
+    ['P-256', 'P-384', 'P-521'].includes((key.algorithm as EcKeyAlgorithm).namedCurve) ||
+    key.algorithm.name === 'X25519' ||
+    key.algorithm.name === 'X448'
+  )
 }

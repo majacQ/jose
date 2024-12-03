@@ -1,51 +1,43 @@
-/* eslint-disable no-underscore-dangle */
+import { encode as base64url } from '../../runtime/base64url.js'
+import sign from '../../runtime/sign.js'
 
 import isDisjoint from '../../lib/is_disjoint.js'
 import { JWSInvalid } from '../../util/errors.js'
 import { encoder, decoder, concat } from '../../lib/buffer_utils.js'
-
-import { encode as base64url } from '../../runtime/base64url.js'
-import sign from '../../runtime/sign.js'
-import type { KeyLike, FlattenedJWS, JWSHeaderParameters, SignOptions } from '../../types.d'
-import checkKeyType from '../../lib/check_key_type.js'
+import type { JWK, KeyLike, FlattenedJWS, JWSHeaderParameters, SignOptions } from '../../types.d'
+import { checkKeyTypeWithJwk } from '../../lib/check_key_type.js'
 import validateCrit from '../../lib/validate_crit.js'
 
-const checkExtensions = validateCrit.bind(undefined, JWSInvalid, new Map([['b64', true]]))
-
 /**
- * The FlattenedSign class is a utility for creating Flattened JWS objects.
+ * The FlattenedSign class is used to build and sign Flattened JWS objects.
  *
- * @example ESM import
+ * This class is exported (as a named export) from the main `'jose'` module entry point as well as
+ * from its subpath export `'jose/jws/flattened/sign'`.
+ *
+ * @example
+ *
  * ```js
- * import { FlattenedSign } from 'jose/jws/flattened/sign'
- * ```
- *
- * @example CJS import
- * ```js
- * const { FlattenedSign } = require('jose/jws/flattened/sign')
- * ```
- *
- * @example Usage
- * ```js
- * const encoder = new TextEncoder()
- *
- * const jws = await new FlattenedSign(encoder.encode('It’s a dangerous business, Frodo, going out your door.'))
+ * const jws = await new jose.FlattenedSign(
+ *   new TextEncoder().encode('It’s a dangerous business, Frodo, going out your door.'),
+ * )
  *   .setProtectedHeader({ alg: 'ES256' })
  *   .sign(privateKey)
+ *
  * console.log(jws)
  * ```
  */
-class FlattenedSign {
+export class FlattenedSign {
   private _payload: Uint8Array
 
   private _protectedHeader!: JWSHeaderParameters
 
   private _unprotectedHeader!: JWSHeaderParameters
 
-  /**
-   * @param payload Binary representation of the payload to sign.
-   */
+  /** @param payload Binary representation of the payload to sign. */
   constructor(payload: Uint8Array) {
+    if (!(payload instanceof Uint8Array)) {
+      throw new TypeError('payload must be an instance of Uint8Array')
+    }
     this._payload = payload
   }
 
@@ -54,7 +46,7 @@ class FlattenedSign {
    *
    * @param protectedHeader JWS Protected Header.
    */
-  setProtectedHeader(protectedHeader: JWSHeaderParameters) {
+  setProtectedHeader(protectedHeader: JWSHeaderParameters): this {
     if (this._protectedHeader) {
       throw new TypeError('setProtectedHeader can only be called once')
     }
@@ -67,7 +59,7 @@ class FlattenedSign {
    *
    * @param unprotectedHeader JWS Unprotected Header.
    */
-  setUnprotectedHeader(unprotectedHeader: JWSHeaderParameters) {
+  setUnprotectedHeader(unprotectedHeader: JWSHeaderParameters): this {
     if (this._unprotectedHeader) {
       throw new TypeError('setUnprotectedHeader can only be called once')
     }
@@ -78,10 +70,11 @@ class FlattenedSign {
   /**
    * Signs and resolves the value of the Flattened JWS object.
    *
-   * @param key Private Key or Secret to sign the JWS with.
+   * @param key Private Key or Secret to sign the JWS with. See
+   *   {@link https://github.com/panva/jose/issues/210#jws-alg Algorithm Key Requirements}.
    * @param options JWS Sign options.
    */
-  async sign(key: KeyLike, options?: SignOptions): Promise<FlattenedJWS> {
+  async sign(key: KeyLike | Uint8Array | JWK, options?: SignOptions): Promise<FlattenedJWS> {
     if (!this._protectedHeader && !this._unprotectedHeader) {
       throw new JWSInvalid(
         'either setProtectedHeader or setUnprotectedHeader must be called before #sign()',
@@ -99,9 +92,15 @@ class FlattenedSign {
       ...this._unprotectedHeader,
     }
 
-    const extensions = checkExtensions(options?.crit, this._protectedHeader, joseHeader)
+    const extensions = validateCrit(
+      JWSInvalid,
+      new Map([['b64', true]]),
+      options?.crit,
+      this._protectedHeader,
+      joseHeader,
+    )
 
-    let b64: boolean = true
+    let b64 = true
     if (extensions.has('b64')) {
       b64 = this._protectedHeader.b64!
       if (typeof b64 !== 'boolean') {
@@ -117,7 +116,7 @@ class FlattenedSign {
       throw new JWSInvalid('JWS "alg" (Algorithm) Header Parameter missing or invalid')
     }
 
-    checkKeyType(alg, key)
+    checkKeyTypeWithJwk(alg, key, 'sign')
 
     let payload = this._payload
     if (b64) {
@@ -137,6 +136,7 @@ class FlattenedSign {
 
     const jws: FlattenedJWS = {
       signature: base64url(signature),
+      payload: '',
     }
 
     if (b64) {
@@ -154,7 +154,3 @@ class FlattenedSign {
     return jws
   }
 }
-
-export { FlattenedSign }
-export default FlattenedSign
-export type { KeyLike, FlattenedJWS, JWSHeaderParameters }

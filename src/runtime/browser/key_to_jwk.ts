@@ -1,17 +1,25 @@
 import crypto, { isCryptoKey } from './webcrypto.js'
-import type { JWKConvertFunction } from '../interfaces.d'
+import type { JWKExportFunction } from '../interfaces.d'
 import type { JWK } from '../../types.d'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import { encode as base64url } from './base64url.js'
+import { types } from './is_key_like.js'
 
-const keyToJWK: JWKConvertFunction = async (key: unknown): Promise<JWK> => {
+const keyToJWK: JWKExportFunction = async (key: unknown): Promise<JWK> => {
+  if (key instanceof Uint8Array) {
+    return {
+      kty: 'oct',
+      k: base64url(key),
+    }
+  }
   if (!isCryptoKey(key)) {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(key, ...types, 'Uint8Array'))
   }
   if (!key.extractable) {
-    throw new TypeError('non-extractable key cannot be extracted as a JWK')
+    throw new TypeError('non-extractable CryptoKey cannot be exported as a JWK')
   }
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const { ext, key_ops, alg, use, ...jwk } = await crypto.subtle.exportKey('jwk', key)
 
-  return jwk
+  return jwk as JWK
 }
 export default keyToJWK

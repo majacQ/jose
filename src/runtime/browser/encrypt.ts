@@ -3,15 +3,23 @@ import type { EncryptFunction } from '../interfaces.d'
 import checkIvLength from '../../lib/check_iv_length.js'
 import checkCekLength from './check_cek_length.js'
 import crypto, { isCryptoKey } from './webcrypto.js'
+import { checkEncCryptoKey } from '../../lib/crypto_key.js'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import generateIv from '../../lib/iv.js'
+import { JOSENotSupported } from '../../util/errors.js'
+import { types } from './is_key_like.js'
 
 async function cbcEncrypt(
   enc: string,
   plaintext: Uint8Array,
-  cek: Uint8Array,
+  cek: Uint8Array | CryptoKey,
   iv: Uint8Array,
   aad: Uint8Array,
 ) {
-  const keySize = parseInt(enc.substr(1, 3), 10)
+  if (!(cek instanceof Uint8Array)) {
+    throw new TypeError(invalidKeyInput(cek, 'Uint8Array'))
+  }
+  const keySize = parseInt(enc.slice(1, 4), 10)
   const encKey = await crypto.subtle.importKey(
     'raw',
     cek.subarray(keySize >> 3),
@@ -23,7 +31,7 @@ async function cbcEncrypt(
     'raw',
     cek.subarray(0, keySize >> 3),
     {
-      hash: { name: `SHA-${keySize << 1}` },
+      hash: `SHA-${keySize << 1}`,
       name: 'HMAC',
     },
     false,
@@ -46,19 +54,23 @@ async function cbcEncrypt(
     (await crypto.subtle.sign('HMAC', macKey, macData)).slice(0, keySize >> 3),
   )
 
-  return { ciphertext, tag }
+  return { ciphertext, tag, iv }
 }
 
 async function gcmEncrypt(
+  enc: string,
   plaintext: Uint8Array,
   cek: Uint8Array | CryptoKey,
   iv: Uint8Array,
   aad: Uint8Array,
 ) {
-  const encKey =
-    cek instanceof Uint8Array
-      ? await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt'])
-      : cek
+  let encKey: CryptoKey
+  if (cek instanceof Uint8Array) {
+    encKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt'])
+  } else {
+    checkEncCryptoKey(cek, enc, 'encrypt')
+    encKey = cek
+  }
 
   const encrypted = new Uint8Array(
     await crypto.subtle.encrypt(
@@ -76,28 +88,44 @@ async function gcmEncrypt(
   const tag = encrypted.slice(-16)
   const ciphertext = encrypted.slice(0, -16)
 
-  return { ciphertext, tag }
+  return { ciphertext, tag, iv }
 }
 
 const encrypt: EncryptFunction = async (
   enc: string,
   plaintext: Uint8Array,
   cek: unknown,
-  iv: Uint8Array,
+  iv: Uint8Array | undefined,
   aad: Uint8Array,
 ) => {
   if (!isCryptoKey(cek) && !(cek instanceof Uint8Array)) {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(cek, ...types, 'Uint8Array'))
   }
 
-  checkCekLength(enc, cek)
-  checkIvLength(enc, iv)
-
-  if (enc.substr(4, 3) === 'CBC') {
-    return cbcEncrypt(enc, plaintext, <Uint8Array>cek, iv, aad)
+  if (iv) {
+    checkIvLength(enc, iv)
+  } else {
+    iv = generateIv(enc)
   }
 
-  return gcmEncrypt(plaintext, cek, iv, aad)
+  switch (enc) {
+    case 'A128CBC-HS256':
+    case 'A192CBC-HS384':
+    case 'A256CBC-HS512':
+      if (cek instanceof Uint8Array) {
+        checkCekLength(cek, parseInt(enc.slice(-3), 10))
+      }
+      return cbcEncrypt(enc, plaintext, cek, iv, aad)
+    case 'A128GCM':
+    case 'A192GCM':
+    case 'A256GCM':
+      if (cek instanceof Uint8Array) {
+        checkCekLength(cek, parseInt(enc.slice(1, 4), 10))
+      }
+      return gcmEncrypt(enc, plaintext, cek, iv, aad)
+    default:
+      throw new JOSENotSupported('Unsupported JWE Content Encryption Algorithm')
+  }
 }
 
 export default encrypt

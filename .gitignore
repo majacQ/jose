@@ -2,9 +2,6 @@
 src/runtime/*.ts
 !src/runtime/*.d.ts
 
-# cjs clone of the test suite
-test/cjs
-
 # Logs
 logs
 *.log
@@ -49,7 +46,6 @@ node_modules/
 jspm_packages/
 yarn.lock
 npm-shrinkwrap.json
-package-lock.json
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -128,3 +124,9 @@ dist-browser-tests
 
 
 .npmrc
+tap/*.js
+tap/run-*.mjs
+*.bak
+*.bun
+tap/.workerd.capnp
+tap/.workers.capnp

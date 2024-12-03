@@ -1,70 +1,27 @@
-const { readFileSync, writeFileSync, unlinkSync } = require("fs");
+const { readFileSync, writeFileSync, unlinkSync } = require('fs')
 
-const pkg = JSON.parse(readFileSync("./package.json"));
-delete pkg.devDependencies;
-delete pkg.scripts;
-delete pkg.imports;
+const pkg = JSON.parse(readFileSync('./package.json'))
 
-pkg.description = pkg.description.replace("Universal ", "(Browser Runtime) ");
-
+pkg.devDependencies = undefined
+pkg.scripts = undefined
+pkg.imports = undefined
+pkg.description = undefined
+pkg.main = undefined
+pkg.keywords = undefined
 for (const exportPath of Object.keys(pkg.exports)) {
-  if (exportPath.startsWith("./webcrypto")) {
-    delete pkg.exports[exportPath];
-  } else if (
-    typeof pkg.exports[exportPath] === "object" &&
-    "browser" in pkg.exports[exportPath]
-  ) {
-    pkg.exports[exportPath] = pkg.exports[exportPath].browser;
-  }
+  pkg.exports[exportPath].import = undefined
+  pkg.exports[exportPath].require = undefined
+  pkg.exports[exportPath].node = pkg.exports[exportPath].browser
 }
-delete pkg.typesVersions["*"]["webcrypto/*"];
 
-const deletedKeywords = new Set([
-  "okp",
-  "secp256k1",
-  "universal",
-  "eddsa",
-  "isomorphic",
-  "electron",
-]);
-pkg.keywords = pkg.keywords.filter((keyword) => {
-  return !deletedKeywords.has(keyword);
-});
+pkg.files.push('!dist/**/package.json')
+pkg.files.push('!dist/node/**/*')
+pkg.files.push('dist/**/*.bundle.js')
+pkg.files.push('dist/**/*.umd.js')
+pkg.files.push('dist/**/*.min.js')
+pkg.name = 'jose-browser-runtime'
+pkg.type = 'module'
 
-pkg.files.push("!dist/node/**/*");
-pkg.files.push("!dist/**/package.json");
-
-pkg.name = "jose-browser-runtime";
-pkg.type = "module";
-
-writeFileSync("./package.json", JSON.stringify(pkg, null, 2) + "\n");
-writeFileSync(
-  "./README.md",
-  `# jose
-
-> ${pkg.description} using Web Cryptography API.
-
-⚠️ This distribution only supports the Browser runtime.
-Its purpose is to offer a distribution of \`jose\` with a smaller bundle/install
-size before tree-shaking.
-
-For the universal module see [npmjs.com/package/jose](https://www.npmjs.com/package/jose)
-
-## Support
-
-If you or your business use \`jose\`, please consider becoming a [sponsor][support-sponsor] so I can continue maintaining it and adding new features carefree.
-
-## Install
-
-\`\`\`console
-npm install jose@npm:${pkg.name}
-\`\`\`
-
-## Documentation
-
-See [${pkg.homepage.replace("https://", "")}](${pkg.homepage})
-
-[support-sponsor]: https://github.com/sponsors/panva
-`
-);
-unlinkSync("./CHANGELOG.md");
+writeFileSync('./package.json', `${JSON.stringify(pkg, null, 2)}\n`)
+unlinkSync('./CHANGELOG.md')
+unlinkSync('./README.md')

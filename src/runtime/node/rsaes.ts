@@ -1,14 +1,25 @@
-import { KeyObject, publicEncrypt, constants, privateDecrypt } from 'crypto'
+import { KeyObject, publicEncrypt, constants, privateDecrypt } from 'node:crypto'
+import { deprecate } from 'node:util'
+
 import type { RsaEsDecryptFunction, RsaEsEncryptFunction } from '../interfaces.d'
-import checkModulusLength from './check_modulus_length.js'
-import { isCryptoKey, getKeyObject } from './webcrypto.js'
+import checkKeyLength from './check_key_length.js'
+import { isCryptoKey } from './webcrypto.js'
+import { checkEncCryptoKey } from '../../lib/crypto_key.js'
+import isKeyObject from './is_key_object.js'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import { types } from './is_key_like.js'
 
 const checkKey = (key: KeyObject, alg: string) => {
-  if (key.type === 'secret' || key.asymmetricKeyType !== 'rsa') {
-    throw new TypeError('invalid key type or asymmetric key type for this operation')
+  if (key.asymmetricKeyType !== 'rsa') {
+    throw new TypeError('Invalid key for this operation, its asymmetricKeyType must be rsa')
   }
-  checkModulusLength(key, alg)
+  checkKeyLength(key, alg)
 }
+
+const RSA1_5 = deprecate(
+  () => constants.RSA_PKCS1_PADDING,
+  'The RSA1_5 "alg" (JWE Algorithm) is deprecated and will be removed in the next major revision.',
+)
 
 const resolvePadding = (alg: string) => {
   switch (alg) {
@@ -18,7 +29,7 @@ const resolvePadding = (alg: string) => {
     case 'RSA-OAEP-512':
       return constants.RSA_PKCS1_OAEP_PADDING
     case 'RSA1_5':
-      return constants.RSA_PKCS1_PADDING
+      return RSA1_5()
     default:
       return undefined
   }
@@ -40,16 +51,17 @@ const resolveOaepHash = (alg: string) => {
 }
 
 function ensureKeyObject(key: unknown, alg: string, ...usages: KeyUsage[]) {
-  if (key instanceof KeyObject) {
+  if (isKeyObject(key)) {
     return key
   }
   if (isCryptoKey(key)) {
-    return getKeyObject(key, alg, new Set(usages))
+    checkEncCryptoKey(key, alg, ...usages)
+    return KeyObject.from(key)
   }
-  throw new TypeError('invalid key input')
+  throw new TypeError(invalidKeyInput(key, ...types))
 }
 
-export const encrypt: RsaEsEncryptFunction = async (alg: string, key: unknown, cek: Uint8Array) => {
+export const encrypt: RsaEsEncryptFunction = (alg: string, key: unknown, cek: Uint8Array) => {
   const padding = resolvePadding(alg)
   const oaepHash = resolveOaepHash(alg)
   const keyObject = ensureKeyObject(key, alg, 'wrapKey', 'encrypt')
@@ -58,7 +70,7 @@ export const encrypt: RsaEsEncryptFunction = async (alg: string, key: unknown, c
   return publicEncrypt({ key: keyObject, oaepHash, padding }, cek)
 }
 
-export const decrypt: RsaEsDecryptFunction = async (
+export const decrypt: RsaEsDecryptFunction = (
   alg: string,
   key: unknown,
   encryptedKey: Uint8Array,

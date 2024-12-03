@@ -1,6 +1,4 @@
-/* eslint-disable no-await-in-loop */
-
-import type { DigestFunction } from '../runtime/interfaces.d'
+import digest from '../runtime/digest.js'
 
 export const encoder = new TextEncoder()
 export const decoder = new TextDecoder()
@@ -11,10 +9,10 @@ export function concat(...buffers: Uint8Array[]): Uint8Array {
   const size = buffers.reduce((acc, { length }) => acc + length, 0)
   const buf = new Uint8Array(size)
   let i = 0
-  buffers.forEach((buffer) => {
+  for (const buffer of buffers) {
     buf.set(buffer, i)
     i += buffer.length
-  })
+  }
   return buf
 }
 
@@ -48,26 +46,15 @@ export function lengthAndInput(input: Uint8Array) {
   return concat(uint32be(input.length), input)
 }
 
-export async function concatKdf(
-  digest: DigestFunction,
-  secret: Uint8Array,
-  bits: number,
-  value: Uint8Array,
-) {
+export async function concatKdf(secret: Uint8Array, bits: number, value: Uint8Array) {
   const iterations = Math.ceil((bits >> 3) / 32)
-  let res!: Uint8Array
-
-  for (let iter = 1; iter <= iterations; iter++) {
+  const res = new Uint8Array(iterations * 32)
+  for (let iter = 0; iter < iterations; iter++) {
     const buf = new Uint8Array(4 + secret.length + value.length)
-    buf.set(uint32be(iter))
+    buf.set(uint32be(iter + 1))
     buf.set(secret, 4)
     buf.set(value, 4 + secret.length)
-    if (!res) {
-      res = await digest('sha256', buf)
-    } else {
-      res = concat(res, await digest('sha256', buf))
-    }
+    res.set(await digest('sha256', buf), iter * 32)
   }
-  res = res.slice(0, bits >> 3)
-  return res
+  return res.slice(0, bits >> 3)
 }

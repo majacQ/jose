@@ -1,6 +1,5 @@
+import { Buffer } from 'node:buffer'
 import { decoder } from '../../lib/buffer_utils.js'
-
-let encodeImpl: (input: Uint8Array | string) => string
 
 function normalize(input: string | Uint8Array) {
   let encoded = input
@@ -10,12 +9,10 @@ function normalize(input: string | Uint8Array) {
   return encoded
 }
 
-if (Buffer.isEncoding('base64url')) {
-  encodeImpl = (input) => Buffer.from(input).toString(<BufferEncoding>'base64url')
-} else {
-  encodeImpl = (input) =>
-    Buffer.from(input).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
-}
+const encode = (input: Uint8Array | string) => Buffer.from(input).toString('base64url')
 
-export const encode = encodeImpl
-export const decode = (input: Uint8Array | string) => Buffer.from(normalize(input), 'base64')
+export const decodeBase64 = (input: string) => new Uint8Array(Buffer.from(input, 'base64'))
+export const encodeBase64 = (input: Uint8Array | string) => Buffer.from(input).toString('base64')
+export { encode }
+export const decode = (input: Uint8Array | string) =>
+  new Uint8Array(Buffer.from(normalize(input), 'base64url'))

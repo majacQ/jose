@@ -1,248 +1,151 @@
 # jose
 
-> Universal "JSON Web Almost Everything" - JWA, JWS, JWE, JWT, JWK with no dependencies using native crypto runtimes
+`jose` is JavaScript module for JSON Object Signing and Encryption, providing support for JSON Web Tokens (JWT), JSON Web Signature (JWS), JSON Web Encryption (JWE), JSON Web Key (JWK), JSON Web Key Set (JWKS), and more. The module is designed to work across various Web-interoperable runtimes including Node.js, browsers, Cloudflare Workers, Deno, Bun, and others.
 
-## Implemented specs & features
+## Sponsor
 
-The following specifications are implemented by `jose`
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/panva/jose/HEAD/sponsor/Auth0byOkta_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/panva/jose/HEAD/sponsor/Auth0byOkta_light.png">
+  <img height="65" align="left" alt="Auth0 by Okta" src="https://raw.githubusercontent.com/panva/jose/HEAD/sponsor/Auth0byOkta_light.png">
+</picture>
 
-- JSON Web Signature (JWS) - [RFC7515][spec-jws]
-- JSON Web Encryption (JWE) - [RFC7516][spec-jwe]
-- JSON Web Key (JWK) - [RFC7517][spec-jwk]
-- JSON Web Algorithms (JWA) - [RFC7518][spec-jwa]
-- JSON Web Token (JWT) - [RFC7519][spec-jwt]
-- JSON Web Key Thumbprint - [RFC7638][spec-thumbprint]
-- JWS Unencoded Payload Option - [RFC7797][spec-b64]
-- CFRG Elliptic Curve ECDH and Signatures - [RFC8037][spec-okp]
-- secp256k1 EC Key curve support - [JOSE Registrations for WebAuthn Algorithms][spec-secp256k1]
+If you want to quickly add JWT authentication to JavaScript apps, feel free to check out Auth0's JavaScript SDK and free plan. [Create an Auth0 account; it's free!][sponsor-auth0]<br><br>
 
-The test suite utilizes examples defined in [RFC7520][spec-cookbook] to confirm its JOSE
-implementation is correct.
+## [💗 Help the project](https://github.com/sponsors/panva)
 
-## Support
+Support from the community to continue maintaining and improving this module is welcome. If you find the module useful, please consider supporting the project by [becoming a sponsor](https://github.com/sponsors/panva).
 
-If you or your business use `jose`, please consider becoming a [sponsor][support-sponsor] so I can continue maintaining it and adding new features carefree.
+## Dependencies: 0
 
-## Install
-
-```console
-npm install jose
-```
-
-<details>
-<summary><em>Looking for a Node.js only distribution?</em> (Click to expand)</summary>
-
-ESM module (import):
-```console
-npm install jose@npm:jose-node-esm-runtime
-```
-
-CJS module (require):
-```console
-npm install jose@npm:jose-node-cjs-runtime
-```
-</details>
-
-<details>
-<summary><em>Looking for a Browser only distribution?</em> (Click to expand)</summary>
-
-```console
-npm install jose@npm:jose-browser-runtime
-```
-</details>
+`jose` has no dependencies and it exports tree-shakeable ESM. CJS is also supported.
 
 ## Documentation
 
-- JSON Web Tokens (JWT)
-  - [Signing](docs/classes/jwt_sign.signjwt.md#readme)
-  - [Verification & Claims Set Validation](docs/functions/jwt_verify.jwtverify.md#readme)
-  - Encrypted JSON Web Tokens
-    - [Encryption](docs/classes/jwt_encrypt.encryptjwt.md#readme)
-    - [Decryption & Claims Set Validation](docs/functions/jwt_decrypt.jwtdecrypt.md#readme)
-- JSON Web Encryption (JWE)
-  - Encryption - [Compact](docs/classes/jwe_compact_encrypt.compactencrypt.md#readme), [Flattened](docs/classes/jwe_flattened_encrypt.flattenedencrypt.md#readme)
-  - Decryption - [Compact](docs/functions/jwe_compact_decrypt.compactdecrypt.md#readme), [Flattened](docs/functions/jwe_flattened_decrypt.flatteneddecrypt.md#readme), [General](docs/functions/jwe_general_decrypt.generaldecrypt.md#readme)
-- JSON Web Signature (JWS)
-  - Signing - [Compact](docs/classes/jws_compact_sign.compactsign.md#readme), [Flattened](docs/classes/jws_flattened_sign.flattenedsign.md#readme), [General](docs/classes/jws_general_sign.generalsign.md#readme)
-  - Verification - [Compact](docs/functions/jws_compact_verify.compactverify.md#readme), [Flattened](docs/functions/jws_flattened_verify.flattenedverify.md#readme), [General](docs/functions/jws_general_verify.generalverify.md#readme)
-- JSON Web Key (JWK)
-  - [Parsing (JWK to KeyLike)](docs/functions/jwk_parse.parsejwk.md#readme)
-  - [Conversion (KeyLike to JWK)](docs/functions/jwk_from_key_like.fromkeylike.md#readme)
-  - [Thumbprints](docs/functions/jwk_thumbprint.calculatethumbprint.md#readme)
-  - [EmbeddedJWK](docs/functions/jwk_embedded.embeddedjwk.md#readme)
-- JSON Web Key Set (JWKS)
-  - [Verify using a remote JWKSet](docs/functions/jwks_remote.createremotejwkset.md#readme)
-- Key Pair or Secret Generation (Generate KeyLike)
-  - [Asymmetric Key Pair Generation](docs/functions/util_generate_key_pair.generatekeypair.md#readme)
-  - [Symmetric Secret Generation](docs/functions/util_generate_secret.generatesecret.md#readme)
-- Utilities
-  - [Decoding Token's Protected Header](docs/functions/util_decode_protected_header.decodeprotectedheader.md#readme)
-- [Unsecured JWT](docs/classes/jwt_unsecured.unsecuredjwt.md#readme)
-- [JOSE Errors](docs/modules/util_errors.md#readme)
+`jose` is distributed via [npmjs.com](https://www.npmjs.com/package/jose), [deno.land/x](https://deno.land/x/jose), [cdnjs.com](https://cdnjs.com/libraries/jose), [jsdelivr.com](https://www.jsdelivr.com/package/npm/jose), and [github.com](https://github.com/panva/jose).
 
-## Examples
+**`example`** ESM import
 
-A continuously growing list of examples is available in the [tracker](https://github.com/panva/jose/issues?q=label%3Aexample+label%3Av3.x).
+```js
+import * as jose from 'jose'
+```
 
-## JOSE Support Matrix
+**`example`** CJS require
 
-| JWK Key Types | Supported | `kty` value | |
-| -- | -- | -- | -- |
-| RSA | ✓ | RSA | |
-| Elliptic Curve | ✓ | EC | supported curves: P-256, secp256k1, P-384, P-521 |
-| Octet Key Pair | ✓ | OKP | supported subtypes: Ed25519, Ed448, X25519, X448 |
-| Octet sequence | ✓ | oct | |
+```js
+const jose = require('jose')
+```
 
-| Serialization | JWS Sign | JWS Verify | JWE Encrypt | JWE Decrypt |
-| -- | -- | -- | -- | -- |
-| Compact | ✓ | ✓ | ✓ | ✓ |
-| General JSON | ✓ | ✓ | ✕ | ✓ |
-| Flattened JSON | ✓ | ✓ | ✓ | ✓ |
+### JSON Web Tokens (JWT)
 
-| JWT Sign | JWT Verify | JWT Encrypt | JWT Decrypt |
-| -- | -- | -- | -- |
-| ✓ | ✓ | ✓ | ✓ |
+The `jose` module supports JSON Web Tokens (JWT) and provides functionality for signing and verifying tokens, as well as their JWT Claims Set validation.
 
-| JWS Algorithms | Supported | |
-| -- | -- | -- |
-| RSASSA-PKCS1-v1_5 | ✓ | RS256, RS384, RS512 |
-| RSASSA-PSS | ✓ | PS256, PS384, PS512 |
-| ECDSA | ✓ | ES256, ES256K, ES384, ES512 |
-| Edwards-curve DSA | ✓ | EdDSA |
-| HMAC with SHA-2 | ✓ | HS256, HS384, HS512 |
-| Unsecured JWS | ✓ | none |
+- [JWT Claims Set Validation & Signature Verification](docs/jwt/verify/functions/jwtVerify.md) using the `jwtVerify` function
+  - [Using a remote JSON Web Key Set (JWKS)](docs/jwks/remote/functions/createRemoteJWKSet.md)
+  - [Using a local JSON Web Key Set (JWKS)](docs/jwks/local/functions/createLocalJWKSet.md)
+- [Signing](docs/jwt/sign/classes/SignJWT.md) using the `SignJWT` class
+- Utility functions
+  - [Decoding Token's Protected Header](docs/util/decode_protected_header/functions/decodeProtectedHeader.md)
+  - [Decoding JWT Claims Set](docs/util/decode_jwt/functions/decodeJwt.md) prior to its validation
 
-| JWE Key Management Algorithms | Supported | |
-| -- | -- | -- |
-| AES | ✓ | A128KW, A192KW, A256KW |
-| AES GCM | ✓ | A128GCMKW, A192GCMKW, A256GCMKW |
-| Direct Key Agreement | ✓ | dir |
-| RSAES OAEP | ✓ | RSA-OAEP, RSA-OAEP-256, RSA-OAEP-384, RSA-OAEP-512 |
-| RSAES-PKCS1-v1_5 | ✓ | RSA1_5 |
-| PBES2 | ✓ | PBES2-HS256+A128KW, PBES2-HS384+A192KW, PBES2-HS512+A256KW |
-| ECDH-ES | ✓ | ECDH-ES, ECDH-ES+A128KW, ECDH-ES+A192KW, ECDH-ES+A256KW |
+### Encrypted JSON Web Tokens
 
-| JWE Content Encryption Algorithms | Supported | |
-| -- | -- | -- |
-| AES GCM | ✓ | A128GCM, A192GCM, A256GCM |
-| AES CBC w/ HMAC | ✓ |  A128CBC-HS256, A192CBC-HS384, A256CBC-HS512 |
+The `jose` module supports encrypted JSON Web Tokens and provides functionality for encrypting and decrypting tokens, as well as their JWT Claims Set validation.
 
-Legend:
-- **✓** Implemented
-- **✕** Not Considered
+- [Decryption & JWT Claims Set Validation](docs/jwt/decrypt/functions/jwtDecrypt.md) using the `jwtDecrypt` function
+- [Encryption](docs/jwt/encrypt/classes/EncryptJWT.md) using the `EncryptJWT` class
+- Utility functions
+  - [Decoding Token's Protected Header](docs/util/decode_protected_header/functions/decodeProtectedHeader.md)
 
-## Runtime Support Matrix
+### Key Utilities
 
-| Platform | supported versions | caveats |
-| -- | -- | -- |
-| Node.js | LTS ^12.19.0 &vert;&vert; ^14.15.0 | |
-| Electron | ^12.0.0 | see <sup>[1]</sup> |
-| Deno | ✕ | needs [Web Cryptography API integration](https://github.com/denoland/deno/issues/1891) first |
-| React Native | ✕ | has no available and usable crypto runtime |
-| IE | ✕ | implements old version of the Web Cryptography API specification |
-| Browsers | see [caniuse.com][caniuse] | |
-| --- | | |
-| Edge | 79+ | see <sup>[2], [4]</sup> |
-| Firefox | 57+ | see <sup>[2]</sup> |
-| Chrome | 63+ | see <sup>[2], [4]</sup> |
-| Safari | 11+ | see <sup>[2], [3]</sup> |
-| Opera | 50+ | see <sup>[2], [4]</sup> |
-| iOS Safari | 12+ | see <sup>[2], [3]</sup> |
+The `jose` module supports importing, exporting, and generating keys and secrets in various formats, including PEM formats like SPKI, X.509 certificate, and PKCS #8, as well as JSON Web Key (JWK).
 
-<sup>1</sup> Due to its use of BoringSSL the following is not supported in Electron
-  - A128KW, A192KW, A256KW, and all composite algorithms utilizing those
-  - secp256k1 EC curve
-  - Ed448, X25519, and X448 OKP Sub Types  
+- Key Import Functions
+  - [JWK Import](docs/key/import/functions/importJWK.md)
+  - [Public Key Import (SPKI)](docs/key/import/functions/importSPKI.md)
+  - [Public Key Import (X.509 Certificate)](docs/key/import/functions/importX509.md)
+  - [Private Key Import (PKCS #8)](docs/key/import/functions/importPKCS8.md)
+- Key and Secret Generation Functions
+  - [Asymmetric Key Pair Generation](docs/key/generate_key_pair/functions/generateKeyPair.md)
+  - [Symmetric Secret Generation](docs/key/generate_secret/functions/generateSecret.md)
+- Key Export Functions
+  - [JWK Export](docs/key/export/functions/exportJWK.md)
+  - [Private Key Export](docs/key/export/functions/exportPKCS8.md)
+  - [Public Key Export](docs/key/export/functions/exportSPKI.md)
 
-<sup>2</sup> RSA1_5, OKP JWK Key Type, and secp256k1 EC curve is not supported in [Web Cryptography API][webcrypto].   
+### JSON Web Signature (JWS)
 
-<sup>3</sup> P-521 EC curve is not supported in Safari  
+The `jose` module supports signing and verification of JWS messages with arbitrary payloads in Compact, Flattened JSON, and General JSON serialization syntaxes.
 
-<sup>4</sup> 192 bit AES keys are not supported in Chromium  
+- Signing - [Compact](docs/jws/compact/sign/classes/CompactSign.md), [Flattened JSON](docs/jws/flattened/sign/classes/FlattenedSign.md), [General JSON](docs/jws/general/sign/classes/GeneralSign.md)
+- Verification - [Compact](docs/jws/compact/verify/functions/compactVerify.md), [Flattened JSON](docs/jws/flattened/verify/functions/flattenedVerify.md), [General JSON](docs/jws/general/verify/functions/generalVerify.md)
+  - [Using a remote JSON Web Key Set (JWKS)](docs/jwks/remote/functions/createRemoteJWKSet.md)
+  - [Using a local JSON Web Key Set (JWKS)](docs/jwks/local/functions/createLocalJWKSet.md)
+- Utility functions
+  - [Decoding Token's Protected Header](docs/util/decode_protected_header/functions/decodeProtectedHeader.md)
 
-## FAQ
+### JSON Web Encryption (JWE)
 
-#### Supported Versions
+The `jose` module supports encryption and decryption of JWE messages with arbitrary plaintext in Compact, Flattened JSON, and General JSON serialization syntaxes.
 
-| Version | Bug Fixes 🐞 | New Features ⭐ |
-| ------- | --------- | -------- |
-| [3.x.x](https://github.com/panva/jose) | ✅ | ✅ |
-| [2.x.x](https://github.com/panva/jose/tree/v2.x) | ✅ until 2022-04-30 | ❌ |
+- Encryption - [Compact](docs/jwe/compact/encrypt/classes/CompactEncrypt.md), [Flattened JSON](docs/jwe/flattened/encrypt/classes/FlattenedEncrypt.md), [General JSON](docs/jwe/general/encrypt/classes/GeneralEncrypt.md)
+- Decryption - [Compact](docs/jwe/compact/decrypt/functions/compactDecrypt.md), [Flattened JSON](docs/jwe/flattened/decrypt/functions/flattenedDecrypt.md), [General JSON](docs/jwe/general/decrypt/functions/generalDecrypt.md)
+- Utility functions
+  - [Decoding Token's Protected Header](docs/util/decode_protected_header/functions/decodeProtectedHeader.md)
 
-#### What is new in v3.x?
+### Other
 
-- Revised API
-- No dependencies
-- Browser support (using [Web Cryptography API][webcrypto])
-- Promise-based API
+The following are additional features and utilities provided by the `jose` module:
 
-#### v2.x docs?
+- [Calculating JWK Thumbprint](docs/jwk/thumbprint/functions/calculateJwkThumbprint.md)
+- [Calculating JWK Thumbprint URI](docs/jwk/thumbprint/functions/calculateJwkThumbprintUri.md)
+- [Verification using a JWK Embedded in a JWS Header](docs/jwk/embedded/functions/EmbeddedJWK.md)
+- [Unsecured JWT](docs/jwt/unsecured/classes/UnsecuredJWT.md)
+- [JOSE Errors](docs/util/errors/README.md)
 
-[Here.](https://github.com/panva/jose/blob/v2.x/docs/README.md)
+## Supported Runtimes
 
-#### Semver?
+The `jose` module is compatible with JavaScript runtimes that support the utilized Web API globals and standard built-in objects or are Node.js.
 
-**Yes.** All module's public API is subject to [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
+The following runtimes are supported _(this is not an exhaustive list)_:
 
-#### How is it different from [`jws`](https://github.com/brianloveswords/node-jws), [`jwa`](https://github.com/brianloveswords/node-jwa) or [`jsonwebtoken`](https://github.com/auth0/node-jsonwebtoken)?
+- [Bun](https://github.com/panva/jose/issues/471)
+- [Browsers](https://github.com/panva/jose/issues/263)
+- [Cloudflare Workers](https://github.com/panva/jose/issues/265)
+- [Deno](https://github.com/panva/jose/issues/266)
+- [Electron](https://github.com/panva/jose/issues/264)
+- [Node.js](https://github.com/panva/jose/issues/262)
+- [Vercel's Edge Runtime](https://github.com/panva/jose/issues/301)
 
-- it supports browser runtime
-- it supports encrypted JWTs (i.e. in JWE format)
-- supports secp256k1, Ed25519, Ed448, X25519, and X448
-- it supports JWK Key Format for all four key types (oct, RSA, EC and OKP)
-- it is exclusively using native platform Key object representations (CryptoKey and KeyObject)
-- there is JSON Web Encryption support
-- it supports the flattened JWS / JWE Serialization Syntaxes
-- it supports the "crit" member validations to make sure extensions are handled correctly
+Please note that certain algorithms may not be available depending on the runtime used. You can find a list of available algorithms for each runtime in the specific issue links provided above.
 
-#### How is it different from [`node-jose`](https://github.com/cisco/node-jose)?
+## Supported Versions
 
-`node-jose` is also built to work in any javascript runtime, to be able to do that it packs a lot of
-polyfills and javascript implementation code in the form of
-[`node-forge`](https://github.com/digitalbazaar/forge), this significantly increases the footprint
-of the modules with dependencies that either aren't ever used or have native implementation available
-in the runtime already, those are often times faster and more reliable.
+| Version                                         | Security Fixes 🔑 | Other Bug Fixes 🐞 | New Features ⭐ |
+| ----------------------------------------------- | ----------------- | ------------------ | --------------- |
+| [v5.x](https://github.com/panva/jose/tree/v5.x) | ✅                | ✅                 | ✅              |
+| [v4.x](https://github.com/panva/jose/tree/v4.x) | ✅                | ❌                 | ❌              |
+| [v2.x](https://github.com/panva/jose/tree/v2.x) | ✅                | ❌                 | ❌              |
 
-- it has smaller module footprints as it does not bundle unnecessary polyfills
-- it does not bundle [`node-forge`](https://github.com/digitalbazaar/forge) fallbacks when crypto runtime is unavailable
-- supports secp256k1, Ed25519, Ed448, X25519, and X448
+## Specifications
 
-#### Uint8Array?!
+<details>
+<summary>Details</summary>
 
-- Whenever `Uint8Array` is a valid input, so is [`Buffer`](https://nodejs.org/api/buffer.html#buffer_buffer) since buffers are instances of Uint8Array.
-- Whenever `Uint8Array` is returned and you want a `Buffer` instead, use `Buffer.from(uint8array)`.
+- JSON Web Signature (JWS) - [RFC7515](https://www.rfc-editor.org/rfc/rfc7515)
+- JSON Web Encryption (JWE) - [RFC7516](https://www.rfc-editor.org/rfc/rfc7516)
+- JSON Web Key (JWK) - [RFC7517](https://www.rfc-editor.org/rfc/rfc7517)
+- JSON Web Algorithms (JWA) - [RFC7518](https://www.rfc-editor.org/rfc/rfc7518)
+- JSON Web Token (JWT) - [RFC7519](https://www.rfc-editor.org/rfc/rfc7519)
+- JSON Web Key Thumbprint - [RFC7638](https://www.rfc-editor.org/rfc/rfc7638)
+- JSON Web Key Thumbprint URI - [RFC9278](https://www.rfc-editor.org/rfc/rfc9278)
+- JWS Unencoded Payload Option - [RFC7797](https://www.rfc-editor.org/rfc/rfc7797)
+- CFRG Elliptic Curve ECDH and Signatures - [RFC8037](https://www.rfc-editor.org/rfc/rfc8037)
+- secp256k1 EC Key curve support - [RFC8812](https://www.rfc-editor.org/rfc/rfc8812)
 
-#### Bundle Size, Package Size, Tree Shaking
+The algorithm implementations in `jose` have been tested using test vectors from their respective specifications as well as [RFC7520](https://www.rfc-editor.org/rfc/rfc7520).
 
-Yes the bundle size is on the larger side, that is because each module is actually published 
-multiple times so that it can remain truly without dependencies and be universal / isomorphic.
+</details>
 
-Nevertheless, since each module can be required independently and is fully tree-shakeable, the
-install size should not be a cause for concern.
-
-#### Why? Just. Why?
-
-I was using [`node-jose`][node-jose] for
-[`openid-client`](https://github.com/panva/node-openid-client) and
-[`oidc-provider`](https://github.com/panva/node-oidc-provider) and came to realize its shortcomings
-in terms of performance and API (not having well defined errors).
-
-&plus; this was an amazing opportunity to learn JOSE as a whole
-
-[documentation]: /docs/README.md
-[node-jose]: https://github.com/cisco/node-jose
-[spec-b64]: https://tools.ietf.org/html/rfc7797
-[spec-cookbook]: https://tools.ietf.org/html/rfc7520
-[spec-jwa]: https://tools.ietf.org/html/rfc7518
-[spec-jwe]: https://tools.ietf.org/html/rfc7516
-[spec-jwk]: https://tools.ietf.org/html/rfc7517
-[spec-jws]: https://tools.ietf.org/html/rfc7515
-[spec-jwt]: https://tools.ietf.org/html/rfc7519
-[spec-okp]: https://tools.ietf.org/html/rfc8037
-[spec-secp256k1]: https://tools.ietf.org/html/rfc8812
-[spec-thumbprint]: https://tools.ietf.org/html/rfc7638
-[support-sponsor]: https://github.com/sponsors/panva
-[conditional-exports]: https://nodejs.org/api/packages.html#packages_conditional_exports
-[webcrypto]: https://www.w3.org/TR/WebCryptoAPI/
-[nodewebcrypto]: https://nodejs.org/docs/latest-v15.x/api/webcrypto.html
-[caniuse]: https://caniuse.com/mdn-javascript_operators_await,async-functions,mdn-javascript_statements_for_await_of,cryptography,textencoder
+[sponsor-auth0]: https://a0.to/signup/panva

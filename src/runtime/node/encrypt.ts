@@ -1,25 +1,30 @@
-import { KeyObject, createCipheriv } from 'crypto'
-import type { CipherGCMTypes } from 'crypto'
+import { createCipheriv, KeyObject } from 'node:crypto'
+import type { CipherGCMTypes } from 'node:crypto'
 
 import type { EncryptFunction } from '../interfaces.d'
 import checkIvLength from '../../lib/check_iv_length.js'
 import checkCekLength from './check_cek_length.js'
 import { concat } from '../../lib/buffer_utils.js'
 import cbcTag from './cbc_tag.js'
-import type { KeyLike } from '../../types.d'
-import { isCryptoKey, getKeyObject } from './webcrypto.js'
+import { isCryptoKey } from './webcrypto.js'
+import { checkEncCryptoKey } from '../../lib/crypto_key.js'
+import isKeyObject from './is_key_object.js'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import generateIv from '../../lib/iv.js'
+import { JOSENotSupported } from '../../util/errors.js'
+import supported from './ciphers.js'
+import { types } from './is_key_like.js'
 
-async function cbcEncrypt(
+function cbcEncrypt(
   enc: string,
   plaintext: Uint8Array,
   cek: KeyObject | Uint8Array,
   iv: Uint8Array,
   aad: Uint8Array,
 ) {
-  const keySize = parseInt(enc.substr(1, 3), 10)
+  const keySize = parseInt(enc.slice(1, 4), 10)
 
-  if (cek instanceof KeyObject) {
-    // eslint-disable-next-line no-param-reassign
+  if (isKeyObject(cek)) {
     cek = cek.export()
   }
 
@@ -27,60 +32,81 @@ async function cbcEncrypt(
   const macKey = cek.subarray(0, keySize >> 3)
 
   const algorithm = `aes-${keySize}-cbc`
+  if (!supported(algorithm)) {
+    throw new JOSENotSupported(`alg ${enc} is not supported by your javascript runtime`)
+  }
+
   const cipher = createCipheriv(algorithm, encKey, iv)
   const ciphertext = concat(cipher.update(plaintext), cipher.final())
 
-  const macSize = parseInt(enc.substr(-3), 10)
+  const macSize = parseInt(enc.slice(-3), 10)
   const tag = cbcTag(aad, iv, ciphertext, macSize, macKey, keySize)
 
-  return { ciphertext, tag }
+  return { ciphertext, tag, iv }
 }
-async function gcmEncrypt(
+
+function gcmEncrypt(
   enc: string,
   plaintext: Uint8Array,
   cek: KeyObject | Uint8Array,
   iv: Uint8Array,
   aad: Uint8Array,
 ) {
-  const keySize = parseInt(enc.substr(1, 3), 10)
+  const keySize = parseInt(enc.slice(1, 4), 10)
 
-  const algorithm = <CipherGCMTypes>`aes-${keySize}-gcm`
-  const cipher = createCipheriv(algorithm, cek, iv, { authTagLength: 16 })
-  if (aad.byteLength) {
-    cipher.setAAD(aad)
+  const algorithm = `aes-${keySize}-gcm` as CipherGCMTypes
+  if (!supported(algorithm)) {
+    throw new JOSENotSupported(`alg ${enc} is not supported by your javascript runtime`)
   }
 
-  const ciphertext = concat(cipher.update(plaintext), cipher.final())
+  const cipher = createCipheriv(algorithm, cek, iv, { authTagLength: 16 })
+  if (aad.byteLength) {
+    cipher.setAAD(aad, { plaintextLength: plaintext.length })
+  }
+
+  const ciphertext = cipher.update(plaintext)
+  cipher.final()
   const tag = cipher.getAuthTag()
 
-  return { ciphertext, tag }
+  return { ciphertext, tag, iv }
 }
 
-const encrypt: EncryptFunction = async (
+const encrypt: EncryptFunction = (
   enc: string,
   plaintext: Uint8Array,
   cek: unknown,
-  iv: Uint8Array,
+  iv: Uint8Array | undefined,
   aad: Uint8Array,
 ) => {
-  let key: KeyLike
+  let key: KeyObject | Uint8Array
   if (isCryptoKey(cek)) {
-    // eslint-disable-next-line no-param-reassign
-    key = getKeyObject(cek, enc, new Set(['encrypt']))
-  } else if (cek instanceof Uint8Array || cek instanceof KeyObject) {
+    checkEncCryptoKey(cek, enc, 'encrypt')
+    key = KeyObject.from(cek)
+  } else if (cek instanceof Uint8Array || isKeyObject(cek)) {
     key = cek
   } else {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(cek, ...types, 'Uint8Array'))
   }
 
   checkCekLength(enc, key)
-  checkIvLength(enc, iv)
-
-  if (enc.substr(4, 3) === 'CBC') {
-    return cbcEncrypt(enc, plaintext, key, iv, aad)
+  if (iv) {
+    checkIvLength(enc, iv)
+  } else {
+    iv = generateIv(enc)
   }
 
-  return gcmEncrypt(enc, plaintext, key, iv, aad)
+  switch (enc) {
+    case 'A128CBC-HS256':
+    case 'A192CBC-HS384':
+    case 'A256CBC-HS512':
+      return cbcEncrypt(enc, plaintext, key, iv, aad)
+    case 'A128GCM':
+    case 'A192GCM':
+    case 'A256GCM':
+      return gcmEncrypt(enc, plaintext, key, iv, aad)
+    default:
+      throw new JOSENotSupported('Unsupported JWE Content Encryption Algorithm')
+  }
 }
 
 export default encrypt

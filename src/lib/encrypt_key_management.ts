@@ -1,32 +1,41 @@
-import type { KeyLike, JWEKeyManagementHeaderParameters } from '../types.d'
-import type { JWEKeyManagementHeaderResults } from '../types.i.d'
-import cekFactory, { bitLengths as cekLengths } from '../lib/cek.js'
-import { JOSENotSupported } from '../util/errors.js'
-import random from '../runtime/random.js'
 import { wrap as aesKw } from '../runtime/aeskw.js'
 import * as ECDH from '../runtime/ecdhes.js'
 import { encrypt as pbes2Kw } from '../runtime/pbes2kw.js'
 import { encrypt as rsaEs } from '../runtime/rsaes.js'
-import { wrap as aesGcmKw } from '../runtime/aesgcmkw.js'
 import { encode as base64url } from '../runtime/base64url.js'
-import { fromKeyLike } from '../jwk/from_key_like.js'
+import normalize from '../runtime/normalize_key.js'
 
-const generateCek = cekFactory(random)
+import type {
+  KeyLike,
+  JWEKeyManagementHeaderParameters,
+  JWEHeaderParameters,
+  JWK,
+} from '../types.d'
+import generateCek, { bitLength as cekLength } from '../lib/cek.js'
+import { JOSENotSupported } from '../util/errors.js'
+import { exportJWK } from '../key/export.js'
+import checkKeyType from './check_key_type.js'
+import { wrap as aesGcmKw } from './aesgcmkw.js'
 
 async function encryptKeyManagement(
   alg: string,
   enc: string,
-  key: KeyLike,
+  key: KeyLike | Uint8Array,
   providedCek?: Uint8Array,
   providedParameters: JWEKeyManagementHeaderParameters = {},
 ): Promise<{
-  cek: KeyLike
+  cek: KeyLike | Uint8Array
   encryptedKey?: Uint8Array
-  parameters?: JWEKeyManagementHeaderResults
+  parameters?: JWEHeaderParameters
 }> {
   let encryptedKey: Uint8Array | undefined
-  let parameters: JWEKeyManagementHeaderResults | undefined
-  let cek: KeyLike
+  let parameters: (JWEHeaderParameters & { epk?: JWK }) | undefined
+  let cek: KeyLike | Uint8Array
+
+  checkKeyType(alg, key, 'encrypt')
+
+  // @ts-ignore
+  key = (await normalize.normalizePublicKey?.(key, alg)) || key
 
   switch (alg) {
     case 'dir': {
@@ -41,22 +50,23 @@ async function encryptKeyManagement(
       // Direct Key Agreement
       if (!ECDH.ecdhAllowed(key)) {
         throw new JOSENotSupported(
-          'ECDH-ES with the provided key is not allowed or not supported by your javascript runtime',
+          'ECDH with the provided key is not allowed or not supported by your javascript runtime',
         )
       }
       const { apu, apv } = providedParameters
       let { epk: ephemeralKey } = providedParameters
-      ephemeralKey ||= await ECDH.generateEpk(key)
-      const { x, y, crv, kty } = await fromKeyLike(ephemeralKey)
+      ephemeralKey ||= (await ECDH.generateEpk(key)).privateKey
+      const { x, y, crv, kty } = await exportJWK(ephemeralKey!)
       const sharedSecret = await ECDH.deriveKey(
         key,
         ephemeralKey,
         alg === 'ECDH-ES' ? enc : alg,
-        parseInt(alg.substr(-5, 3), 10) || <number>cekLengths.get(enc),
+        alg === 'ECDH-ES' ? cekLength(enc) : parseInt(alg.slice(-5, -2), 10),
         apu,
         apv,
       )
-      parameters = { epk: { x, y, crv, kty } }
+      parameters = { epk: { x, crv, kty } }
+      if (kty === 'EC') parameters.epk!.y = y
       if (apu) parameters.apu = base64url(apu)
       if (apv) parameters.apv = base64url(apv)
 
@@ -67,7 +77,7 @@ async function encryptKeyManagement(
 
       // Key Agreement with Key Wrapping
       cek = providedCek || generateCek(enc)
-      const kwAlg = alg.substr(-6)
+      const kwAlg = alg.slice(-6)
       encryptedKey = await aesKw(kwAlg, sharedSecret, cek)
       break
     }
@@ -108,7 +118,7 @@ async function encryptKeyManagement(
       break
     }
     default: {
-      throw new JOSENotSupported('unsupported or invalid "alg" (JWE Algorithm) header value')
+      throw new JOSENotSupported('Invalid or unsupported "alg" (JWE Algorithm) header value')
     }
   }
 

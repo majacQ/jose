@@ -4,18 +4,24 @@ import type { DecryptFunction } from '../interfaces.d'
 import checkIvLength from '../../lib/check_iv_length.js'
 import checkCekLength from './check_cek_length.js'
 import timingSafeEqual from './timing_safe_equal.js'
-import { JWEDecryptionFailed } from '../../util/errors.js'
+import { JOSENotSupported, JWEDecryptionFailed, JWEInvalid } from '../../util/errors.js'
 import crypto, { isCryptoKey } from './webcrypto.js'
+import { checkEncCryptoKey } from '../../lib/crypto_key.js'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import { types } from './is_key_like.js'
 
 async function cbcDecrypt(
   enc: string,
-  cek: Uint8Array,
+  cek: Uint8Array | CryptoKey,
   ciphertext: Uint8Array,
   iv: Uint8Array,
   tag: Uint8Array,
   aad: Uint8Array,
 ) {
-  const keySize = parseInt(enc.substr(1, 3), 10)
+  if (!(cek instanceof Uint8Array)) {
+    throw new TypeError(invalidKeyInput(cek, 'Uint8Array'))
+  }
+  const keySize = parseInt(enc.slice(1, 4), 10)
   const encKey = await crypto.subtle.importKey(
     'raw',
     cek.subarray(keySize >> 3),
@@ -27,7 +33,7 @@ async function cbcDecrypt(
     'raw',
     cek.subarray(0, keySize >> 3),
     {
-      hash: { name: `SHA-${keySize << 1}` },
+      hash: `SHA-${keySize << 1}`,
       name: 'HMAC',
     },
     false,
@@ -65,16 +71,20 @@ async function cbcDecrypt(
 }
 
 async function gcmDecrypt(
+  enc: string,
   cek: Uint8Array | CryptoKey,
   ciphertext: Uint8Array,
   iv: Uint8Array,
   tag: Uint8Array,
   aad: Uint8Array,
 ) {
-  const encKey =
-    cek instanceof Uint8Array
-      ? await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['decrypt'])
-      : cek
+  let encKey: CryptoKey
+  if (cek instanceof Uint8Array) {
+    encKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['decrypt'])
+  } else {
+    checkEncCryptoKey(cek, enc, 'decrypt')
+    encKey = cek
+  }
 
   try {
     return new Uint8Array(
@@ -89,7 +99,7 @@ async function gcmDecrypt(
         concat(ciphertext, tag),
       ),
     )
-  } catch (err) {
+  } catch {
     throw new JWEDecryptionFailed()
   }
 }
@@ -98,22 +108,37 @@ const decrypt: DecryptFunction = async (
   enc: string,
   cek: unknown,
   ciphertext: Uint8Array,
-  iv: Uint8Array,
-  tag: Uint8Array,
+  iv: Uint8Array | undefined,
+  tag: Uint8Array | undefined,
   aad: Uint8Array,
 ) => {
   if (!isCryptoKey(cek) && !(cek instanceof Uint8Array)) {
-    throw new TypeError('invalid key input')
+    throw new TypeError(invalidKeyInput(cek, ...types, 'Uint8Array'))
   }
 
-  checkCekLength(enc, cek)
+  if (!iv) {
+    throw new JWEInvalid('JWE Initialization Vector missing')
+  }
+  if (!tag) {
+    throw new JWEInvalid('JWE Authentication Tag missing')
+  }
+
   checkIvLength(enc, iv)
 
-  if (enc.substr(4, 3) === 'CBC') {
-    return cbcDecrypt(enc, <Uint8Array>cek, ciphertext, iv, tag, aad)
+  switch (enc) {
+    case 'A128CBC-HS256':
+    case 'A192CBC-HS384':
+    case 'A256CBC-HS512':
+      if (cek instanceof Uint8Array) checkCekLength(cek, parseInt(enc.slice(-3), 10))
+      return cbcDecrypt(enc, cek, ciphertext, iv, tag, aad)
+    case 'A128GCM':
+    case 'A192GCM':
+    case 'A256GCM':
+      if (cek instanceof Uint8Array) checkCekLength(cek, parseInt(enc.slice(1, 4), 10))
+      return gcmDecrypt(enc, cek, ciphertext, iv, tag, aad)
+    default:
+      throw new JOSENotSupported('Unsupported JWE Content Encryption Algorithm')
   }
-
-  return gcmDecrypt(cek, ciphertext, iv, tag, aad)
 }
 
 export default decrypt

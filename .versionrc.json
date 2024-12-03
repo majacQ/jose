@@ -1,8 +1,8 @@
 {
   "commit-all": true,
   "scripts": {
-    "prerelease": "npm run-script build-all",
-    "postbump": "node ./tools/docs.postbump.js",
+    "prerelease": "node ./tools/prebump.js && npm run-script build-all",
+    "postbump": "node ./tools/postbump.js",
     "postchangelog": "sed -i '' -e 's/### \\[/## [/g' CHANGELOG.md"
   },
   "types": [
@@ -12,7 +12,7 @@
     },
     {
       "type": "fix",
-      "section": "Bug Fixes"
+      "section": "Fixes"
     },
     {
       "type": "chore",
@@ -29,7 +29,12 @@
     {
       "type": "refactor",
       "section": "Refactor",
-      "hidden": true
+      "hidden": false
+    },
+    {
+      "type": "revert",
+      "section": "Reverts",
+      "hidden": false
     },
     {
       "type": "perf",

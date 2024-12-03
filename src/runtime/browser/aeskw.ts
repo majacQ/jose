@@ -1,26 +1,31 @@
 import type { AesKwUnwrapFunction, AesKwWrapFunction } from '../interfaces.d'
 import bogusWebCrypto from './bogus.js'
 import crypto, { isCryptoKey } from './webcrypto.js'
+import { checkEncCryptoKey } from '../../lib/crypto_key.js'
+import invalidKeyInput from '../../lib/invalid_key_input.js'
+import { types } from './is_key_like.js'
 
 function checkKeySize(key: CryptoKey, alg: string) {
-  if ((<AesKeyAlgorithm>key.algorithm).length !== parseInt(alg.substr(1, 3), 10)) {
-    throw new TypeError(`invalid key size for alg: ${alg}`)
+  if ((key.algorithm as AesKeyAlgorithm).length !== parseInt(alg.slice(1, 4), 10)) {
+    throw new TypeError(`Invalid key size for alg: ${alg}`)
   }
 }
 
-function getCryptoKey(key: unknown, usage: KeyUsage) {
+function getCryptoKey(key: unknown, alg: string, usage: KeyUsage) {
   if (isCryptoKey(key)) {
+    checkEncCryptoKey(key, alg, usage)
     return key
   }
+
   if (key instanceof Uint8Array) {
     return crypto.subtle.importKey('raw', key, 'AES-KW', true, [usage])
   }
 
-  throw new TypeError('invalid key input')
+  throw new TypeError(invalidKeyInput(key, ...types, 'Uint8Array'))
 }
 
 export const wrap: AesKwWrapFunction = async (alg: string, key: unknown, cek: Uint8Array) => {
-  const cryptoKey = await getCryptoKey(key, 'wrapKey')
+  const cryptoKey = await getCryptoKey(key, alg, 'wrapKey')
 
   checkKeySize(cryptoKey, alg)
 
@@ -35,7 +40,7 @@ export const unwrap: AesKwUnwrapFunction = async (
   key: unknown,
   encryptedKey: Uint8Array,
 ) => {
-  const cryptoKey = await getCryptoKey(key, 'unwrapKey')
+  const cryptoKey = await getCryptoKey(key, alg, 'unwrapKey')
 
   checkKeySize(cryptoKey, alg)
 
