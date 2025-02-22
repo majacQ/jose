@@ -1,202 +1,160 @@
-name: Continuous Integration
+name: Test
 
 on:
   push:
-    paths-ignore:
-      - "**.md"
-      - "tools/**"
+    branches: [main]
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - "tools/**"
+    branches: [main]
   schedule:
-    - cron: 0 11 * * 1-5
+    - cron: '11 11 * * 1'
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Setup node
-        uses: actions/setup-node@v2
-        with:
-          node-version: 14
-          check-latest: true
-      - name: Store node version variable
-        id: node
-        run: |
-          echo "::set-output name=version::$(node -v)"
-      - name: Cache node_modules
-        uses: actions/cache@v2
-        id: node_modules
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node_modules-${{ hashFiles('package.json') }}-${{ steps.node.outputs.version }}
-      - name: Install dependencies
-        run: npx panva/npm-install-retry
-        if: ${{ steps.node_modules.outputs.cache-hit != 'true' }}
-      - name: Cache dist
-        uses: actions/cache@v2
-        id: dist
-        with:
-          path: dist
-          key: dist-${{ hashFiles('src/**/*.ts') }}-${{ hashFiles('tsconfig/*.json') }}
-      - run: sed -i -e "s/-i ''/-i/g" package.json
-      - run: sed -i -e "s/gcp/cp/g" package.json
-      - name: Build
-        run: npm run build-all
-        if: ${{ steps.dist.outputs.cache-hit != 'true' }}
-      - run: git reset HEAD --hard
+    uses: ./.github/workflows/build.yml
 
-  test:
+  node-versions:
+    uses: panva/.github/.github/workflows/node-versions.yml@main
+    with:
+      min: 20
+
+  node:
     needs:
-      - build
-    continue-on-error: ${{ matrix.experimental || false }}
+      - node-versions
     strategy:
       fail-fast: false
       matrix:
-        node-version:
-          - 12.20.0
-          - 12
-          - 14.15.0
-          - 14
-        include:
-          - experimental: true
-            node-version: '>=15'
+        node-version: ${{ fromJSON(needs.node-versions.outputs.matrix) }}
+        suite:
+          - tap:node
+          - test
 
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Setup node
-        uses: actions/setup-node@v2
+        id: node
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'npm'
           check-latest: true
-      - name: Store node version variable
-        id: node
-        run: |
-          echo "::set-output name=version::$(node -v)"
-      - name: Cache node_modules
-        uses: actions/cache@v2
-        id: node_modules
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node_modules-${{ hashFiles('package.json') }}-${{ steps.node.outputs.version }}
-      - name: Install dependencies
-        run: npx panva/npm-install-retry
-        if: ${{ steps.node_modules.outputs.cache-hit != 'true' }}
-      - name: Load cached dist
-        uses: actions/cache@v2
-        id: dist
-        with:
-          path: dist
-          key: dist-${{ hashFiles('src/**/*.ts') }}-${{ hashFiles('tsconfig/*.json') }}
-      - name: Test Node.js crypto
-        run: npm run test
-      - name: Test Node.js crypto w/ CryptoKey
-        run: npm run test-cryptokey
-        if: ${{ !startsWith(matrix.node-version, '14') && !startsWith(matrix.node-version, '12')  }}
-      - name: Test Web Cryptography API
-        run: npm run test-webcrypto
-        if: ${{ !startsWith(matrix.node-version, '14') && !startsWith(matrix.node-version, '12')  }}
-      - run: git reset HEAD --hard
+      - run: npm clean-install
+      - name: Run Test Suite
+        run: npm run ${{ matrix.suite }}
 
-  test-electron:
-    needs:
-      - build
+  deno:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: latest
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+      - run: npm clean-install
+      - name: Test Deno Definitions
+        run: |
+          npm run build:deno
+          deno check dist/deno/index.ts
+      - name: Test Deno
+        run: npm run tap:deno
+
+  bun:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+      - run: npm clean-install
+      - name: Test Bun
+        run: npm run tap:bun
+
+  workerd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+      - run: npm clean-install
+      - run: npm install --global workerd
+      - name: Run Test Suite
+        run: npm run tap:workerd
+
+  edge-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+      - run: npm clean-install
+      - name: Run Test Suite
+        run: npm run tap:edge-runtime
+
+  browsers:
+    runs-on: ${{ matrix.runs-on || 'ubuntu-latest' }}
     strategy:
+      fail-fast: false
       matrix:
-        electron-version:
-          - 12.0.0
-          - latest
-    runs-on: ubuntu-latest
+        browser:
+          - chrome:headless
+          - firefox:headless
+          - edge:headless
+        include:
+          - runs-on: macos-14
+            browser: safari
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Setup node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: 14
-          check-latest: true
-      - name: Store node version variable
-        id: node
+          node-version: lts/*
+          cache: 'npm'
+      - run: npm clean-install
+      - run: npm install --global testcafe@3
+      - name: Add rows to the TCC.db
+        if: ${{ matrix.runs-on == 'macos-14' }}
         run: |
-          echo "::set-output name=version::$(node -v)"
-      - name: Cache node_modules
-        uses: actions/cache@v2
-        id: node_modules
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node_modules-${{ hashFiles('package.json') }}-${{ steps.node.outputs.version }}
-      - name: Install dependencies
-        run: npx panva/npm-install-retry
-        if: ${{ steps.node_modules.outputs.cache-hit != 'true' }}
-      - name: Load cached dist
-        uses: actions/cache@v2
-        id: dist
-        with:
-          path: dist
-          key: dist-${{ hashFiles('src/**/*.ts') }}-${{ hashFiles('tsconfig/*.json') }}
-      - name: Install Electron
-        run: npm install --global xvfb-maybe electron@${{ matrix.electron-version }}
-      - name: Test Electron crypto
-        run: xvfb-maybe electron ./test/.electron
-      - run: git reset HEAD --hard
-
-  browserstack:
-    env:
-      BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
-      BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Setup node
-        uses: actions/setup-node@v2
-        with:
-          node-version: 14
-      - name: Store node version variable
-        id: node
-        run: |
-          echo "::set-output name=version::$(node -v)"
-      - name: Cache node_modules
-        uses: actions/cache@v2
-        id: node_modules
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node_modules-${{ hashFiles('package.json') }}-${{ steps.node.outputs.version }}
-      - name: Install dependencies
-        run: npx panva/npm-install-retry
-        if: ${{ steps.node_modules.outputs.cache-hit != 'true' }}
-      - name: Load cached dist
-        uses: actions/cache@v2
-        id: dist
-        with:
-          path: dist
-          key: dist-${{ hashFiles('src/**/*.ts') }}-${{ hashFiles('tsconfig/*.json') }}
-      - run: npm run test-browser
-      - run: git reset HEAD --hard
-
-  prepare-release:
-    needs:
-      - browserstack
-      - test
-      - test-electron
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && github.repository == 'panva/jose' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-      - name: Setup node
-        uses: actions/setup-node@v2
-        with:
-          node-version: 14
-      - run: node tools/release-notes
+          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access VALUES('kTCCServiceAppleEvents','com.devexpress.testcafe-browser-tools',0,2,3,1,X'fade0c0000000068000000010000000700000007000000080000001443fa4ca5141baeda21aeca1f50894673b440d4690000000800000014f8afcf6e69791b283e55bd0b03e39e422745770e0000000800000014bf4fc1aed64c871a49fc6bc9dd3878ce5d4d17c6',NULL,0,'com.apple.Safari',X'fade0c000000002c00000001000000060000000200000010636f6d2e6170706c652e53616661726900000003',NULL,1687952810,NULL,NULL,'UNUSED',1687952810);"
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access VALUES('kTCCServiceScreenCapture','com.devexpress.testcafe-browser-tools',0,2,3,1,X'fade0c0000000068000000010000000700000007000000080000001443fa4ca5141baeda21aeca1f50894673b440d4690000000800000014f8afcf6e69791b283e55bd0b03e39e422745770e0000000800000014bf4fc1aed64c871a49fc6bc9dd3878ce5d4d17c6',NULL,0,'UNUSED',NULL,0,1687952810,NULL,NULL,'UNUSED',1687952810);"
+      - name: Run Test Suite
+        run: npm run tap:browsers
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BROWSER: ${{ matrix.browser }}
+
+  electron:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+      - run: npm clean-install
+      - name: Install Electron
+        run: npm install --global electron
+      - name: Run Test Suite
+        run: npm run tap:electron

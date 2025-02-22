@@ -1,9 +1,13 @@
-/* eslint-disable prefer-destructuring */
+/**
+ * Base64URL encoding and decoding utilities
+ *
+ * @module
+ */
 
-import * as base64url from '../runtime/base64url.js'
+import * as base64url from '../lib/base64url.js'
 
 /**
- * Utility function to encode a string or Uint8Array as a base64url string.
+ * Utility function to encode a string or {@link !Uint8Array} as a base64url string.
  *
  * @param input Value that will be base64url-encoded.
  */

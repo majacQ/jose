@@ -1,8 +1,5 @@
-/* eslint-disable no-restricted-syntax */
-/* eslint-disable no-continue */
-
-const isDisjoint = (...headers: Array<object | undefined>) => {
-  const sources = <object[]>headers.filter(Boolean)
+export default (...headers: Array<object | undefined>) => {
+  const sources = headers.filter(Boolean) as object[]
 
   if (sources.length === 0 || sources.length === 1) {
     return true
@@ -26,4 +23,3 @@ const isDisjoint = (...headers: Array<object | undefined>) => {
 
   return true
 }
-export default isDisjoint

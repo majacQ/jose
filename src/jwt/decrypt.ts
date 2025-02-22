@@ -1,64 +1,76 @@
-import decrypt from '../jwe/compact/decrypt.js'
-import type {
-  KeyLike,
-  DecryptOptions,
-  JWTPayload,
-  JWTClaimVerificationOptions,
-  GetKeyFunction,
-  JWEHeaderParameters,
-  FlattenedJWE,
-  JWTDecryptResult,
-} from '../types.d'
+/**
+ * JSON Web Token (JWT) Decryption (JWT is in JWE format)
+ *
+ * @module
+ */
+
+import type * as types from '../types.d.ts'
+import { compactDecrypt } from '../jwe/compact/decrypt.js'
 import jwtPayload from '../lib/jwt_claims_set.js'
 import { JWTClaimValidationFailed } from '../util/errors.js'
 
-/**
- * Combination of JWE Decryption options and JWT Claims Set verification options.
- */
-interface JWTDecryptOptions extends DecryptOptions, JWTClaimVerificationOptions {}
+/** Combination of JWE Decryption options and JWT Claims Set verification options. */
+export interface JWTDecryptOptions
+  extends types.DecryptOptions,
+    types.JWTClaimVerificationOptions {}
 
 /**
- * Interface for JWT Decryption dynamic key resolution.
- * No token components have been verified at the time of this function call.
+ * Interface for JWT Decryption dynamic key resolution. No token components have been verified at
+ * the time of this function call.
  */
-export interface JWTDecryptGetKey extends GetKeyFunction<JWEHeaderParameters, FlattenedJWE> {}
+export interface JWTDecryptGetKey
+  extends types.GetKeyFunction<types.CompactJWEHeaderParameters, types.FlattenedJWE> {}
 
 /**
- * Verifies the JWT format (to be a JWE Compact format), decrypts the ciphertext, validates the JWT Claims Set.
+ * Verifies the JWT format (to be a JWE Compact format), decrypts the ciphertext, validates the JWT
+ * Claims Set.
  *
- * @param jwt JSON Web Token value (encoded as JWE).
- * @param key Private Key or Secret, or a function resolving one, to decrypt and verify the JWT with.
- * @param options JWT Decryption and JWT Claims Set validation options.
+ * This function is exported (as a named export) from the main `'jose'` module entry point as well
+ * as from its subpath export `'jose/jwt/decrypt'`.
  *
- * @example ESM import
+ * @example
+ *
  * ```js
- * import { jwtDecrypt } from 'jose/jwt/decrypt'
- * ```
+ * const secret = jose.base64url.decode('zH4NRP1HMALxxCFnRZABFA7GOJtzU_gIj02alfL1lvI')
+ * const jwt =
+ *   'eyJhbGciOiJkaXIiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0..MB66qstZBPxAXKdsjet_lA.WHbtJTl4taHp7otOHLq3hBvv0yNPsPEKHYInmCPdDDeyV1kU-f-tGEiU4FxlSqkqAT2hVs8_wMNiQFAzPU1PUgIqWCPsBrPP3TtxYsrtwagpn4SvCsUsx0Mhw9ZhliAO8CLmCBQkqr_T9AcYsz5uZw.7nX9m7BGUu_u1p1qFHzyIg'
  *
- * @example CJS import
- * ```js
- * const { jwtDecrypt } = require('jose/jwt/decrypt')
- * ```
- *
- * @example Usage
- * ```js
- * const jwt = 'eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..KVcNLqK-3-8ZkYIC.xSwF4VxO0kUMUD2W-cifsNUxnr-swyBq-nADBptyt6y9n79-iNc5b0AALJpRwc0wwDkJw8hNOMjApNUTMsK9b-asToZ3DXFMvwfJ6n1aWefvd7RsoZ2LInWFfVAuttJDzoGB.uuexQoWHwrLMEYRElT8pBQ'
- *
- * const { payload, protectedHeader } = await jwtDecrypt(jwt, secretKey, {
+ * const { payload, protectedHeader } = await jose.jwtDecrypt(jwt, secret, {
  *   issuer: 'urn:example:issuer',
- *   audience: 'urn:example:audience'
+ *   audience: 'urn:example:audience',
  * })
  *
  * console.log(protectedHeader)
  * console.log(payload)
  * ```
+ *
+ * @param jwt JSON Web Token value (encoded as JWE).
+ * @param key Private Key or Secret to decrypt and verify the JWT with. See
+ *   {@link https://github.com/panva/jose/issues/210#jwe-alg Algorithm Key Requirements}.
+ * @param options JWT Decryption and JWT Claims Set validation options.
  */
-async function jwtDecrypt(
+export async function jwtDecrypt<PayloadType = types.JWTPayload>(
   jwt: string | Uint8Array,
-  key: KeyLike | JWTDecryptGetKey,
+  key: types.CryptoKey | types.KeyObject | types.JWK | Uint8Array,
   options?: JWTDecryptOptions,
-): Promise<JWTDecryptResult> {
-  const decrypted = await decrypt(jwt, key, options)
+): Promise<types.JWTDecryptResult<PayloadType>>
+/**
+ * @param jwt JSON Web Token value (encoded as JWE).
+ * @param getKey Function resolving Private Key or Secret to decrypt and verify the JWT with. See
+ *   {@link https://github.com/panva/jose/issues/210#jwe-alg Algorithm Key Requirements}.
+ * @param options JWT Decryption and JWT Claims Set validation options.
+ */
+export async function jwtDecrypt<PayloadType = types.JWTPayload>(
+  jwt: string | Uint8Array,
+  getKey: JWTDecryptGetKey,
+  options?: JWTDecryptOptions,
+): Promise<types.JWTDecryptResult<PayloadType> & types.ResolvedKey>
+export async function jwtDecrypt(
+  jwt: string | Uint8Array,
+  key: types.CryptoKey | types.KeyObject | types.JWK | Uint8Array | JWTDecryptGetKey,
+  options?: JWTDecryptOptions,
+) {
+  const decrypted = await compactDecrypt(jwt, key as Parameters<typeof compactDecrypt>[1], options)
   const payload = jwtPayload(decrypted.protectedHeader, decrypted.plaintext, options)
 
   const { protectedHeader } = decrypted
@@ -66,6 +78,7 @@ async function jwtDecrypt(
   if (protectedHeader.iss !== undefined && protectedHeader.iss !== payload.iss) {
     throw new JWTClaimValidationFailed(
       'replicated "iss" claim header parameter mismatch',
+      payload,
       'iss',
       'mismatch',
     )
@@ -74,6 +87,7 @@ async function jwtDecrypt(
   if (protectedHeader.sub !== undefined && protectedHeader.sub !== payload.sub) {
     throw new JWTClaimValidationFailed(
       'replicated "sub" claim header parameter mismatch',
+      payload,
       'sub',
       'mismatch',
     )
@@ -85,14 +99,17 @@ async function jwtDecrypt(
   ) {
     throw new JWTClaimValidationFailed(
       'replicated "aud" claim header parameter mismatch',
+      payload,
       'aud',
       'mismatch',
     )
   }
 
-  return { payload, protectedHeader }
-}
+  const result = { payload, protectedHeader }
 
-export { jwtDecrypt }
-export default jwtDecrypt
-export type { KeyLike, DecryptOptions, JWTPayload, JWTDecryptOptions }
+  if (typeof key === 'function') {
+    return { ...result, key: decrypted.key }
+  }
+
+  return result
+}

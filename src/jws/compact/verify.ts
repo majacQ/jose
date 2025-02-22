@@ -1,60 +1,72 @@
-import verify from '../flattened/verify.js'
+/**
+ * Verifying JSON Web Signature (JWS) in Compact Serialization
+ *
+ * @module
+ */
+
+import type * as types from '../../types.d.ts'
+import { flattenedVerify } from '../flattened/verify.js'
 import { JWSInvalid } from '../../util/errors.js'
 import { decoder } from '../../lib/buffer_utils.js'
-import type {
-  CompactVerifyResult,
-  FlattenedJWSInput,
-  GetKeyFunction,
-  JWSHeaderParameters,
-  KeyLike,
-  VerifyOptions,
-} from '../../types.d'
 
 /**
- * Interface for Compact JWS Verification dynamic key resolution.
- * No token components have been verified at the time of this function call.
+ * Interface for Compact JWS Verification dynamic key resolution. No token components have been
+ * verified at the time of this function call.
  *
- * See [createRemoteJWKSet](../functions/jwks_remote.createremotejwkset.md#function-createremotejwkset)
- * to verify using a remote JSON Web Key Set.
+ * @see {@link jwks/remote.createRemoteJWKSet createRemoteJWKSet} to verify using a remote JSON Web Key Set.
  */
 export interface CompactVerifyGetKey
-  extends GetKeyFunction<JWSHeaderParameters, FlattenedJWSInput> {}
+  extends types.GenericGetKeyFunction<
+    types.CompactJWSHeaderParameters,
+    types.FlattenedJWSInput,
+    types.CryptoKey | types.KeyObject | types.JWK | Uint8Array
+  > {}
 
 /**
  * Verifies the signature and format of and afterwards decodes the Compact JWS.
  *
- * @param jws Compact JWS.
- * @param key Key, or a function resolving a key, to verify the JWS with.
- * @param options JWS Verify options.
+ * This function is exported (as a named export) from the main `'jose'` module entry point as well
+ * as from its subpath export `'jose/jws/compact/verify'`.
  *
- * @example ESM import
+ * @example
+ *
  * ```js
- * import { compactVerify } from 'jose/jws/compact/verify'
- * ```
+ * const jws =
+ *   'eyJhbGciOiJFUzI1NiJ9.SXTigJlzIGEgZGFuZ2Vyb3VzIGJ1c2luZXNzLCBGcm9kbywgZ29pbmcgb3V0IHlvdXIgZG9vci4.kkAs_gPPxWMI3rHuVlxHaTPfDWDoqdI8jSvuSmqV-8IHIWXg9mcAeC9ggV-45ZHRbiRJ3obUIFo1rHphPA5URg'
  *
- * @example CJS import
- * ```js
- * const { compactVerify } = require('jose/jws/compact/verify')
- * ```
- *
- * @example Usage
- * ```js
- * const decoder = new TextDecoder()
- * const jws = 'eyJhbGciOiJFUzI1NiJ9.SXTigJlzIGEgZGFuZ2Vyb3VzIGJ1c2luZXNzLCBGcm9kbywgZ29pbmcgb3V0IHlvdXIgZG9vci4.kkAs_gPPxWMI3rHuVlxHaTPfDWDoqdI8jSvuSmqV-8IHIWXg9mcAeC9ggV-45ZHRbiRJ3obUIFo1rHphPA5URg'
- *
- * const { payload, protectedHeader } = await compactVerify(jws, publicKey)
+ * const { payload, protectedHeader } = await jose.compactVerify(jws, publicKey)
  *
  * console.log(protectedHeader)
- * console.log(decoder.decode(payload))
+ * console.log(new TextDecoder().decode(payload))
  * ```
+ *
+ * @param jws Compact JWS.
+ * @param key Key to verify the JWS with. See
+ *   {@link https://github.com/panva/jose/issues/210#jws-alg Algorithm Key Requirements}.
+ * @param options JWS Verify options.
  */
-async function compactVerify(
+export function compactVerify(
   jws: string | Uint8Array,
-  key: KeyLike | CompactVerifyGetKey,
-  options?: VerifyOptions,
-): Promise<CompactVerifyResult> {
+  key: types.CryptoKey | types.KeyObject | types.JWK | Uint8Array,
+  options?: types.VerifyOptions,
+): Promise<types.CompactVerifyResult>
+/**
+ * @param jws Compact JWS.
+ * @param getKey Function resolving a key to verify the JWS with. See
+ *   {@link https://github.com/panva/jose/issues/210#jws-alg Algorithm Key Requirements}.
+ * @param options JWS Verify options.
+ */
+export function compactVerify(
+  jws: string | Uint8Array,
+  getKey: CompactVerifyGetKey,
+  options?: types.VerifyOptions,
+): Promise<types.CompactVerifyResult & types.ResolvedKey>
+export async function compactVerify(
+  jws: string | Uint8Array,
+  key: types.CryptoKey | types.KeyObject | types.JWK | Uint8Array | CompactVerifyGetKey,
+  options?: types.VerifyOptions,
+) {
   if (jws instanceof Uint8Array) {
-    // eslint-disable-next-line no-param-reassign
     jws = decoder.decode(jws)
   }
 
@@ -67,19 +79,17 @@ async function compactVerify(
     throw new JWSInvalid('Invalid Compact JWS')
   }
 
-  const verified = await verify(
-    {
-      payload: <string>(payload || undefined),
-      protected: protectedHeader || undefined,
-      signature: <string>(signature || undefined),
-    },
-    <Parameters<typeof verify>[1]>key,
+  const verified = await flattenedVerify(
+    { payload, protected: protectedHeader, signature },
+    key as Parameters<typeof flattenedVerify>[1],
     options,
   )
 
-  return { payload: verified.payload, protectedHeader: verified.protectedHeader! }
-}
+  const result = { payload: verified.payload, protectedHeader: verified.protectedHeader! }
 
-export { compactVerify }
-export default compactVerify
-export type { KeyLike, VerifyOptions }
+  if (typeof key === 'function') {
+    return { ...result, key: verified.key }
+  }
+
+  return result
+}

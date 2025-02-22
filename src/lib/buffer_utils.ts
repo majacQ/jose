@@ -1,25 +1,23 @@
-/* eslint-disable no-await-in-loop */
-
-import type { DigestFunction } from '../runtime/interfaces.d'
-
 export const encoder = new TextEncoder()
 export const decoder = new TextDecoder()
 
 const MAX_INT32 = 2 ** 32
 
+// @ts-expect-error
+const Buffer: any = globalThis.process?.getBuiltinModule?.('node:buffer')?.Buffer
+
+export { Buffer }
+
 export function concat(...buffers: Uint8Array[]): Uint8Array {
+  if (Buffer) return Buffer.concat(buffers)
   const size = buffers.reduce((acc, { length }) => acc + length, 0)
   const buf = new Uint8Array(size)
   let i = 0
-  buffers.forEach((buffer) => {
+  for (const buffer of buffers) {
     buf.set(buffer, i)
     i += buffer.length
-  })
+  }
   return buf
-}
-
-export function p2s(alg: string, p2sInput: Uint8Array) {
-  return concat(encoder.encode(alg), new Uint8Array([0]), p2sInput)
 }
 
 function writeUInt32BE(buf: Uint8Array, value: number, offset?: number) {
@@ -42,32 +40,4 @@ export function uint32be(value: number) {
   const buf = new Uint8Array(4)
   writeUInt32BE(buf, value)
   return buf
-}
-
-export function lengthAndInput(input: Uint8Array) {
-  return concat(uint32be(input.length), input)
-}
-
-export async function concatKdf(
-  digest: DigestFunction,
-  secret: Uint8Array,
-  bits: number,
-  value: Uint8Array,
-) {
-  const iterations = Math.ceil((bits >> 3) / 32)
-  let res!: Uint8Array
-
-  for (let iter = 1; iter <= iterations; iter++) {
-    const buf = new Uint8Array(4 + secret.length + value.length)
-    buf.set(uint32be(iter))
-    buf.set(secret, 4)
-    buf.set(value, 4 + secret.length)
-    if (!res) {
-      res = await digest('sha256', buf)
-    } else {
-      res = concat(res, await digest('sha256', buf))
-    }
-  }
-  res = res.slice(0, bits >> 3)
-  return res
 }

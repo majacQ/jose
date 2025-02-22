@@ -1,35 +1,33 @@
-import { ok as assert } from 'assert'
+/**
+ * JOSE Protected Header Decoding (JWE, JWS, all serialization syntaxes)
+ *
+ * @module
+ */
 
 import { decode as base64url } from './base64url.js'
 import { decoder } from '../lib/buffer_utils.js'
 import isObject from '../lib/is_object.js'
-import type { JWSHeaderParameters, JWEHeaderParameters } from '../types.d'
+import type * as types from '../types.d.ts'
 
-export type ProtectedHeaderParameters = JWSHeaderParameters & JWEHeaderParameters
+export type ProtectedHeaderParameters = types.JWSHeaderParameters & types.JWEHeaderParameters
 
 /**
  * Decodes the Protected Header of a JWE/JWS/JWT token utilizing any JOSE serialization.
  *
- * @example ESM import
- * ```js
- * import { decodeProtectedHeader } from 'jose/util/decode_protected_header'
- * ```
+ * This function is exported (as a named export) from the main `'jose'` module entry point as well
+ * as from its subpath export `'jose/decode/protected_header'`.
  *
- * @example CJS import
- * ```js
- * const { decodeProtectedHeader } = require('jose/util/decode_protected_header')
- * ```
+ * @example
  *
- * @example Usage
  * ```js
- * const protectedHeader = decodeProtectedHeader(token)
+ * const protectedHeader = jose.decodeProtectedHeader(token)
  * console.log(protectedHeader)
  * ```
  *
  * @param token JWE/JWS/JWT token in any JOSE serialization.
  */
-function decodeProtectedHeader(token: string | object) {
-  let protectedB64u!: string
+export function decodeProtectedHeader(token: string | object): ProtectedHeaderParameters {
+  let protectedB64u!: unknown
 
   if (typeof token === 'string') {
     const parts = token.split('.')
@@ -38,21 +36,22 @@ function decodeProtectedHeader(token: string | object) {
     }
   } else if (typeof token === 'object' && token) {
     if ('protected' in token) {
-      protectedB64u = (<{ protected: string }>token).protected
+      protectedB64u = token.protected
     } else {
       throw new TypeError('Token does not contain a Protected Header')
     }
   }
 
   try {
-    assert(typeof protectedB64u === 'string' && protectedB64u)
+    if (typeof protectedB64u !== 'string' || !protectedB64u) {
+      throw new Error()
+    }
     const result = JSON.parse(decoder.decode(base64url(protectedB64u!)))
-    assert(isObject(result))
-    return <ProtectedHeaderParameters>result
-  } catch (err) {
+    if (!isObject(result)) {
+      throw new Error()
+    }
+    return result as ProtectedHeaderParameters
+  } catch {
     throw new TypeError('Invalid Token or Protected Header formatting')
   }
 }
-
-export { decodeProtectedHeader }
-export default decodeProtectedHeader

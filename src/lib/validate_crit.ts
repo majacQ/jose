@@ -6,14 +6,14 @@ interface CritCheckHeader {
   [propName: string]: unknown
 }
 
-function validateCrit(
+export default (
   Err: typeof JWEInvalid | typeof JWSInvalid,
   recognizedDefault: Map<string, boolean>,
   recognizedOption: { [propName: string]: boolean } | undefined,
-  protectedHeader: CritCheckHeader,
+  protectedHeader: CritCheckHeader | undefined,
   joseHeader: CritCheckHeader,
-) {
-  if (joseHeader.crit !== undefined && protectedHeader.crit === undefined) {
+) => {
+  if (joseHeader.crit !== undefined && protectedHeader?.crit === undefined) {
     throw new Err('"crit" (Critical) Header Parameter MUST be integrity protected')
   }
 
@@ -38,7 +38,6 @@ function validateCrit(
     recognized = recognizedDefault
   }
 
-  // eslint-disable-next-line no-restricted-syntax
   for (const parameter of protectedHeader.crit) {
     if (!recognized.has(parameter)) {
       throw new JOSENotSupported(`Extension Header Parameter "${parameter}" is not recognized`)
@@ -46,12 +45,11 @@ function validateCrit(
 
     if (joseHeader[parameter] === undefined) {
       throw new Err(`Extension Header Parameter "${parameter}" is missing`)
-    } else if (recognized.get(parameter) && protectedHeader[parameter] === undefined) {
+    }
+    if (recognized.get(parameter) && protectedHeader[parameter] === undefined) {
       throw new Err(`Extension Header Parameter "${parameter}" MUST be integrity protected`)
     }
   }
 
   return new Set(protectedHeader.crit)
 }
-
-export default validateCrit

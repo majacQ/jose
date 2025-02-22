@@ -1,48 +1,44 @@
-/* eslint-disable no-underscore-dangle */
+/**
+ * Signing JSON Web Signature (JWS) in Compact Serialization
+ *
+ * @module
+ */
 
-import FlattenedSign from '../flattened/sign.js'
-import type { JWSHeaderParameters, KeyLike, SignOptions } from '../../types.d'
+import type * as types from '../../types.d.ts'
+import { FlattenedSign } from '../flattened/sign.js'
 
 /**
- * The CompactSign class is a utility for creating Compact JWS strings.
+ * The CompactSign class is used to build and sign Compact JWS strings.
  *
- * @example ESM import
+ * This class is exported (as a named export) from the main `'jose'` module entry point as well as
+ * from its subpath export `'jose/jws/compact/sign'`.
+ *
+ * @example
+ *
  * ```js
- * import { CompactSign } from 'jose/jws/compact/sign'
- * ```
- *
- * @example CJS import
- * ```js
- * const { CompactSign } = require('jose/jws/compact/sign')
- * ```
- *
- * @example Usage
- * ```js
- * const encoder = new TextEncoder()
- *
- * const jws = await new CompactSign(encoder.encode('It’s a dangerous business, Frodo, going out your door.'))
+ * const jws = await new jose.CompactSign(
+ *   new TextEncoder().encode('It’s a dangerous business, Frodo, going out your door.'),
+ * )
  *   .setProtectedHeader({ alg: 'ES256' })
  *   .sign(privateKey)
  *
  * console.log(jws)
  * ```
  */
-class CompactSign {
+export class CompactSign {
   private _flattened: FlattenedSign
 
-  /**
-   * @param payload Binary representation of the payload to sign.
-   */
+  /** @param payload Binary representation of the payload to sign. */
   constructor(payload: Uint8Array) {
     this._flattened = new FlattenedSign(payload)
   }
 
   /**
-   * Sets the JWS Protected Header on the Sign object.
+   * Sets the JWS Protected Header on the CompactSign object.
    *
    * @param protectedHeader JWS Protected Header.
    */
-  setProtectedHeader(protectedHeader: JWSHeaderParameters) {
+  setProtectedHeader(protectedHeader: types.CompactJWSHeaderParameters): this {
     this._flattened.setProtectedHeader(protectedHeader)
     return this
   }
@@ -50,10 +46,14 @@ class CompactSign {
   /**
    * Signs and resolves the value of the Compact JWS string.
    *
-   * @param key Private Key or Secret to sign the JWS with.
+   * @param key Private Key or Secret to sign the JWS with. See
+   *   {@link https://github.com/panva/jose/issues/210#jws-alg Algorithm Key Requirements}.
    * @param options JWS Sign options.
    */
-  async sign(key: KeyLike, options?: SignOptions): Promise<string> {
+  async sign(
+    key: types.CryptoKey | types.KeyObject | types.JWK | Uint8Array,
+    options?: types.SignOptions,
+  ): Promise<string> {
     const jws = await this._flattened.sign(key, options)
 
     if (jws.payload === undefined) {
@@ -63,7 +63,3 @@ class CompactSign {
     return `${jws.protected}.${jws.payload}.${jws.signature}`
   }
 }
-
-export { CompactSign }
-export default CompactSign
-export type { JWSHeaderParameters, KeyLike }
